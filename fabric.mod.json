@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "myclient",
+  "version": "${version}",
+  "name": "MyClient",
+  "description": "Cosmetics, mods and macros in one menu.",
+  "environment": "client",
+  "entrypoints": { "client": ["dev.myclient.MyClient"] },
+  "depends": { "fabricloader": ">=0.16.0", "minecraft": ">=1.21 <1.22", "java": ">=21", "fabric-api": "*" }
+}
