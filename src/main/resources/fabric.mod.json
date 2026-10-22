@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "myclient",
-  "version": "${version}",
+  "version": "0.1.0",
   "name": "MyClient",
   "description": "Cosmetics, mods and macros in one menu.",
   "environment": "client",

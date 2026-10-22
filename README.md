@@ -12,3 +12,9 @@ Still to build (version-specific, needs a dev environment to test):
 3. Custom skies: mixin on WorldRenderer sky rendering using the chosen sky texture.
 4. Editor: text fields, colour picker, preview, save/load as JSON in config/myclient/.
 5. Persistence of equipped items / settings; multi-version builds (1.21 - 1.21.x) via Stonecutter.
+
+## v0.2
+- Rounded dark UI with real toggle switches, colour swatches, sliders, scrolling.
+- Halos, headbands and capes are drawn on your player (open third person with F5). Animations: float, spin, pulse, wave, rainbow.
+- Editor tab creates real accessories (colour, speed, animation) that show up in Cosmetics.
+- Motion blur and custom skies are still UI-only ("coming soon").

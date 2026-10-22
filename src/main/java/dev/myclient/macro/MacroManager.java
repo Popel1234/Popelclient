@@ -14,11 +14,12 @@ public class MacroManager {
         if (mc.player == null || mc.currentScreen != null) return;
         long window = mc.getWindow().getHandle();
         for (Macro m : macros) {
+            if (!m.enabled || m.command == null || m.command.isBlank()) continue;
             boolean down = GLFW.glfwGetKey(window, m.keyCode) == GLFW.GLFW_PRESS;
             boolean fresh = down && held.add(m.keyCode);
             if (!down) held.remove(m.keyCode);
             boolean repeat = down && m.repeatEveryTicks > 0 && tick % m.repeatEveryTicks == 0;
-            if (fresh || repeat) send(mc, m.command);
+            if (fresh || repeat) send(mc, m.command.trim());
         }
     }
 
