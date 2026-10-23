@@ -26,3 +26,11 @@ Still to build (version-specific, needs a dev environment to test):
 - Upload your own cape/sky PNG (button or drag a .png onto the window). Files are kept in config/myclient/.
 - Textures tab: edit any block texture in-game, Apply writes + enables + reloads the pack resourcepacks/MyClientTextures.
 - Builder tab: load a .litematic from .minecraft/schematics and build it from the hotbar (pauses when a block is missing).
+
+## v0.4
+- Meteor-style GUI: small floating windows (drag the title bar, collapse, close, open from the top dock). Window layout is saved.
+- Smooth Poppins UI font (SIL OFL) and own text boxes, no vanilla widgets. No logo.
+- Search window finds modules, cosmetics, skies, macros, schematics, block tracers and block textures.
+- Tracers: pick any blocks, lines are drawn to them on the HUD (range 8-48).
+- Trail is now a smooth glowing ribbon instead of particles (third person).
+- Everything is saved to config/myclient/settings.json (equipped items, variants, custom items, modules, macros, sky, tracers, windows).

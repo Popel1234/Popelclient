@@ -1,6 +1,7 @@
 package dev.myclient.gui;
 
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.util.math.RotationAxis;
 
 /**
  * Smooth 2D drawing. Everything is drawn at "real pixel" resolution (the GUI matrix is scaled down by `ss`)
@@ -79,5 +80,18 @@ public final class Draw {
 
     public static void circle(DrawContext c, float cx, float cy, float r, int color) {
         rr(c, cx - r, cy - r, r * 2, r * 2, r, color);
+    }
+
+    /** Straight line between two GUI points. */
+    public static void line(DrawContext c, float x1, float y1, float x2, float y2, float thick, int color) {
+        float dx = (x2 - x1) * ss, dy = (y2 - y1) * ss;
+        float len = (float) Math.sqrt(dx * dx + dy * dy);
+        if (len < 0.5f) return;
+        int h = Math.max(1, Math.round(thick * ss / 2f));
+        c.getMatrices().push();
+        c.getMatrices().translate(x1 * ss, y1 * ss, 0);
+        c.getMatrices().multiply(RotationAxis.POSITIVE_Z.rotation((float) Math.atan2(dy, dx)));
+        c.fill(0, -h, Math.round(len), h, color);
+        c.getMatrices().pop();
     }
 }

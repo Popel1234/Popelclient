@@ -27,7 +27,6 @@ public final class Particles {
             switch (c.type) {
                 case HALO -> { if (third) halo(mc, p, c, r); }
                 case AURA -> aura(mc, p, c, r);
-                case TRAIL -> { if (speed > 0.04) trail(mc, p, c, r, vx, vz); }
                 default -> { }
             }
         }

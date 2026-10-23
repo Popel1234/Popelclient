@@ -17,6 +17,8 @@ import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
 import org.joml.Matrix4f;
 
+import java.util.List;
+
 /**
  * Draws equipped cosmetics procedurally on YOUR player (third person, F5).
  * Model space: +Y points DOWN, +Z is the back of the player, the head top is at y = -0.5, feet at y = +1.5.
@@ -58,6 +60,7 @@ public class CosmeticFeature extends FeatureRenderer<PlayerEntityRenderState, Pl
                 case CAPE -> { getContextModel().body.rotate(m); cape(m, vcp, c, t, light, lf, fwd, lat, vy); }
                 case WINGS -> { getContextModel().body.rotate(m); wings(m, vcp, c, t, lf); }
                 case AURA -> aura(m, vcp, c, t);
+                case TRAIL -> trail(m, vcp, c, t, state);
                 default -> { }
             }
             m.pop();
@@ -524,6 +527,65 @@ public class CosmeticFeature extends FeatureRenderer<PlayerEntityRenderState, Pl
         for (int cc = 0; cc < cols; cc++) {
             float[] a = g.p(rows, cc, 0), b = g.p(rows, cc + 1, 0), d = g.p(rows, cc + 1, 1), e = g.p(rows, cc, 1);
             quad(vc, mat, a[0], a[1], a[2], b[0], b[1], b[2], d[0], d[1], d[2], e[0], e[1], e[2], edge, 255);
+        }
+    }
+
+    // ===================================================================== TRAIL (smooth glowing ribbon)
+    private static int trailColor(String variant, float age, float t) {
+        switch (variant) {
+            case "rainbow": return Palette.rainbow(t * 0.35f - age * 0.9f, 0.7f, 1f);
+            case "fire": return age < 0.35f ? mix(0xFFF2A0, 0xFF9020, age / 0.35f) : mix(0xFF9020, 0xD01810, (age - 0.35f) / 0.65f);
+            case "ice": return age < 0.4f ? mix(0xFFFFFF, 0x7FE4FF, age / 0.4f) : mix(0x7FE4FF, 0x2E6BFF, (age - 0.4f) / 0.6f);
+            case "stardust": return mix(0xFFF6C8, 0xFFB347, age);
+            case "soul": return mix(0x9FFFFF, 0x1B6FB0, age);
+            default: return mix(0xD08CFF, 0x4F7CFF, age);   // magic
+        }
+    }
+
+    private static float[] toModel(double wx, double wy, double wz, double fx, double fy, double fz, float cs, float sn) {
+        double dx = wx - fx, dy = wy - fy, dz = wz - fz;
+        double ux = dx * cs - dz * sn, uz = dx * sn + dz * cs;
+        return new float[]{(float) (-ux / 0.9375), (float) (-dy / 0.9375) + 1.501f, (float) (uz / 0.9375)};
+    }
+
+    private void trail(MatrixStack m, VertexConsumerProvider vcp, Cosmetic c, float t, PlayerEntityRenderState state) {
+        double cx = state.x, cy = state.y + 0.95, cz = state.z;
+        TrailSim.add(cx, cy, cz, t);
+        List<double[]> pts = TrailSim.smoothed(cx, cy, cz, t);
+        int n = pts.size();
+        if (n < 2) return;
+        double phi = Math.toRadians(180.0 - state.bodyYaw);
+        float cs = (float) Math.cos(phi), sn = (float) Math.sin(phi);
+        Matrix4f mat = m.peek().getPositionMatrix();
+        VertexConsumer vc = vcp.getBuffer(RenderLayer.getLightning());
+
+        for (int layer = 0; layer < 2; layer++) {
+            float scale = layer == 0 ? 2.4f : 1f;
+            float alphaMul = layer == 0 ? 0.20f : 0.85f;
+            float[][] top = new float[n][], bot = new float[n][], lef = new float[n][], rig = new float[n][];
+            int[] col = new int[n], al = new int[n];
+            for (int i = 0; i < n; i++) {
+                double[] p = pts.get(i), pr = pts.get(Math.max(i - 1, 0)), nx = pts.get(Math.min(i + 1, n - 1));
+                double tx = nx[0] - pr[0], tz = nx[2] - pr[2], len = Math.sqrt(tx * tx + tz * tz);
+                double sx = len < 1e-5 ? 1 : -tz / len, sz = len < 1e-5 ? 0 : tx / len;
+                float age = (float) p[3];
+                float half = (0.012f + 0.13f * (float) Math.pow(1.0 - age, 0.8)) * scale;
+                top[i] = toModel(p[0], p[1] + half, p[2], cx, state.y, cz, cs, sn);
+                bot[i] = toModel(p[0], p[1] - half, p[2], cx, state.y, cz, cs, sn);
+                lef[i] = toModel(p[0] + sx * half * 1.2, p[1], p[2] + sz * half * 1.2, cx, state.y, cz, cs, sn);
+                rig[i] = toModel(p[0] - sx * half * 1.2, p[1], p[2] - sz * half * 1.2, cx, state.y, cz, cs, sn);
+                col[i] = trailColor(c.activeVariant, age, t);
+                al[i] = (int) (255 * Math.pow(1.0 - age, 1.3) * alphaMul);
+            }
+            for (int i = 0; i < n - 1; i++) {
+                int j = i + 1;
+                quadC(vc, mat, top[i][0], top[i][1], top[i][2], bot[i][0], bot[i][1], bot[i][2],
+                    bot[j][0], bot[j][1], bot[j][2], top[j][0], top[j][1], top[j][2],
+                    col[i], col[i], col[j], col[j], al[i], al[i], al[j], al[j]);
+                quadC(vc, mat, lef[i][0], lef[i][1], lef[i][2], rig[i][0], rig[i][1], rig[i][2],
+                    rig[j][0], rig[j][1], rig[j][2], lef[j][0], lef[j][1], lef[j][2],
+                    col[i], col[i], col[j], col[j], al[i], al[i], al[j], al[j]);
+            }
         }
     }
 }

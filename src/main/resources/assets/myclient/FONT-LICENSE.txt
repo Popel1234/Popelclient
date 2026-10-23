@@ -1,0 +1,2 @@
+The UI font (ui.ttf) is Poppins Medium, licensed under the SIL Open Font License 1.1
+(https://openfontlicense.org). Copyright the Poppins Project Authors.
