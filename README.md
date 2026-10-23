@@ -18,3 +18,11 @@ Still to build (version-specific, needs a dev environment to test):
 - Halos, headbands and capes are drawn on your player (open third person with F5). Animations: float, spin, pulse, wave, rainbow.
 - Editor tab creates real accessories (colour, speed, animation) that show up in Cosmetics.
 - Motion blur and custom skies are still UI-only ("coming soon").
+
+## v0.3
+- Menu drawn at real-pixel resolution with anti-aliased rounded shapes, smaller panel, scrolling on every tab.
+- New cosmetics: wings, glasses (square/round), aura, particle trail, night-sky headbands and capes, much cooler halos (particles too).
+- Thicker headbands/capes; capes use a small spring simulation (speed, jump, fall, strafing).
+- Upload your own cape/sky PNG (button or drag a .png onto the window). Files are kept in config/myclient/.
+- Textures tab: edit any block texture in-game, Apply writes + enables + reloads the pack resourcepacks/MyClientTextures.
+- Builder tab: load a .litematic from .minecraft/schematics and build it from the hotbar (pauses when a block is missing).

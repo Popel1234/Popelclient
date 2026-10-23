@@ -2,9 +2,23 @@ package dev.myclient.gui;
 
 import net.minecraft.client.gui.DrawContext;
 
-/** Small 2D helpers: rounded rectangles, circles, colour maths. */
+/**
+ * Smooth 2D drawing. Everything is drawn at "real pixel" resolution (the GUI matrix is scaled down by `ss`)
+ * and edges get partial-alpha pixels, so rounded shapes are not blocky even at high GUI scales.
+ * Call begin() before drawing and end() afterwards; all coordinates stay in normal GUI units.
+ */
 public final class Draw {
     private Draw() {}
+
+    public static float ss = 2f;
+
+    public static void begin(DrawContext c, float s) {
+        ss = s;
+        c.getMatrices().push();
+        c.getMatrices().scale(1f / s, 1f / s, 1f);
+    }
+
+    public static void end(DrawContext c) { c.getMatrices().pop(); }
 
     public static int alpha(int rgb, int a) { return (a << 24) | (rgb & 0xFFFFFF); }
 
@@ -25,28 +39,45 @@ public final class Draw {
         return (aa << 24) | (ar << 16) | (ag << 8) | ab;
     }
 
-    public static void rr(DrawContext c, int x, int y, int w, int h, int r, int color) {
+    private static int mulAlpha(int col, float f) {
+        int a = (int) ((col >>> 24) * Math.max(0f, Math.min(1f, f)));
+        return (a << 24) | (col & 0xFFFFFF);
+    }
+
+    public static void rect(DrawContext c, float x, float y, float w, float h, int color) {
+        c.fill(Math.round(x * ss), Math.round(y * ss), Math.round((x + w) * ss), Math.round((y + h) * ss), color);
+    }
+
+    public static void rr(DrawContext c, float x, float y, float w, float h, float r, int color) {
         rrGrad(c, x, y, w, h, r, color, color);
     }
 
-    /** Rounded rectangle with a vertical gradient. */
-    public static void rrGrad(DrawContext c, int x, int y, int w, int h, int r, int top, int bot) {
-        if (w <= 0 || h <= 0) return;
-        r = Math.max(0, Math.min(r, Math.min(w, h) / 2));
-        for (int i = 0; i < h; i++) {
-            int k = Math.min(i, h - 1 - i);
-            int inset = 0;
-            if (k < r) {
-                double dy = r - k - 0.5;
-                inset = (int) Math.round(r - Math.sqrt(r * (double) r - dy * dy));
+    /** Anti-aliased rounded rectangle with a vertical gradient. */
+    public static void rrGrad(DrawContext c, float x, float y, float w, float h, float r, int top, int bot) {
+        int X = Math.round(x * ss), Y = Math.round(y * ss), W = Math.round(w * ss), H = Math.round(h * ss);
+        if (W <= 0 || H <= 0) return;
+        float R = Math.max(0f, Math.min(r * ss, Math.min(W, H) / 2f));
+        for (int i = 0; i < H; i++) {
+            int k = Math.min(i, H - 1 - i);
+            float inset = 0f;
+            if (k < R) {
+                float dy = R - k - 0.5f;
+                inset = R - (float) Math.sqrt(Math.max(0f, R * R - dy * dy));
             }
-            if (inset * 2 >= w) continue;
-            int col = top == bot ? top : lerp(top, bot, h <= 1 ? 0f : i / (float) (h - 1));
-            c.fill(x + inset, y + i, x + w - inset, y + i + 1, col);
+            int ins = (int) Math.ceil(inset);
+            if (ins * 2 >= W) continue;
+            int col = top == bot ? top : lerp(top, bot, H <= 1 ? 0f : i / (float) (H - 1));
+            c.fill(X + ins, Y + i, X + W - ins, Y + i + 1, col);
+            float cov = ins - inset;
+            if (ins > 0 && cov > 0.03f) {
+                int ec = mulAlpha(col, cov);
+                c.fill(X + ins - 1, Y + i, X + ins, Y + i + 1, ec);
+                c.fill(X + W - ins, Y + i, X + W - ins + 1, Y + i + 1, ec);
+            }
         }
     }
 
-    public static void circle(DrawContext c, int cx, int cy, int r, int color) {
+    public static void circle(DrawContext c, float cx, float cy, float r, int color) {
         rr(c, cx - r, cy - r, r * 2, r * 2, r, color);
     }
 }
