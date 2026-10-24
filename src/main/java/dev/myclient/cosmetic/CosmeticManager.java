@@ -21,26 +21,26 @@ import java.util.stream.Stream;
 public class CosmeticManager {
     public final List<Cosmetic> catalog = new ArrayList<>();
     public final Set<String> equipped = new LinkedHashSet<>();
-    public final List<String> skies = new ArrayList<>(List.of("Default", "Sunset", "Galaxy", "Aurora", "Starry Night", "Nebula"));
+    public final List<String> skies = new ArrayList<>(List.of("Default", "Lumen", "Starry Night", "Galaxy", "Aurora", "Nebula", "Sunset", "Blood Moon"));
     public final Map<String, int[]> uploadedSkies = new HashMap<>();   // name -> {top, bottom} preview colours
     public final Map<String, Path> skyFiles = new HashMap<>();
     public String activeSky = "Default";
     public long ticks;
 
     public CosmeticManager() {
-        catalog.add(new Cosmetic("halo_classic", Type.HALO, List.of("gold", "ice", "neon", "purple"), Animation.FLOAT));
-        catalog.add(new Cosmetic("halo_celestial", Type.HALO, List.of("angel", "ice", "purple", "gold"), Animation.SPIN));
-        catalog.add(new Cosmetic("halo_storm", Type.HALO, List.of("ice", "neon", "purple"), Animation.WAVE));
-        catalog.add(new Cosmetic("headband_pulse", Type.HEADBAND, List.of("red", "blue", "green"), Animation.PULSE));
-        catalog.add(new Cosmetic("headband_night", Type.HEADBAND, List.of("galaxy", "aurora", "nebula", "midnight"), Animation.PULSE));
-        catalog.add(new Cosmetic("cape_flow", Type.CAPE, List.of("crimson", "ocean", "void"), Animation.WAVE));
-        catalog.add(new Cosmetic("cape_night", Type.CAPE, List.of("galaxy", "aurora", "nebula", "midnight"), Animation.WAVE));
-        catalog.add(new Cosmetic("cape_rainbow", Type.CAPE, List.of("default"), Animation.RAINBOW));
-        catalog.add(new Cosmetic("wings_feather", Type.WINGS, List.of("angel", "demon", "ember", "ice"), Animation.FLOAT));
-        catalog.add(new Cosmetic("glasses_square", Type.GLASSES, List.of("dark", "neon", "gold", "pink"), Animation.NONE));
-        catalog.add(new Cosmetic("glasses_round", Type.GLASSES, List.of("dark", "neon", "gold", "pink"), Animation.WAVE));
-        catalog.add(new Cosmetic("aura_glow", Type.AURA, List.of("light", "flame", "frost", "void", "nature"), Animation.PULSE));
-        catalog.add(new Cosmetic("trail_particles", Type.TRAIL, List.of("rainbow", "fire", "ice", "stardust", "soul", "magic"), Animation.NONE));
+        catalog.add(new Cosmetic("halo_classic", Type.HALO, List.of("gold", "ice", "neon", "purple"), Animation.FLOAT, Animation.PULSE, Animation.WAVE, Animation.RAINBOW));
+        catalog.add(new Cosmetic("halo_celestial", Type.HALO, List.of("angel", "ice", "purple", "gold"), Animation.SPIN, Animation.ECLIPSE, Animation.FLOAT));
+        catalog.add(new Cosmetic("halo_storm", Type.HALO, List.of("ice", "neon", "purple"), Animation.CRACKLE, Animation.WAVE, Animation.PULSE));
+        catalog.add(new Cosmetic("headband_pulse", Type.HEADBAND, List.of("red", "blue", "green"), Animation.PULSE, Animation.FLOW, Animation.WHIP, Animation.RAINBOW));
+        catalog.add(new Cosmetic("headband_night", Type.HEADBAND, List.of("galaxy", "aurora", "nebula", "midnight"), Animation.TWINKLE, Animation.FLOW, Animation.WHIP));
+        catalog.add(new Cosmetic("cape_flow", Type.CAPE, List.of("crimson", "ocean", "void"), Animation.WAVE, Animation.BILLOW, Animation.NONE));
+        catalog.add(new Cosmetic("cape_night", Type.CAPE, List.of("galaxy", "aurora", "nebula", "midnight"), Animation.TWINKLE, Animation.WAVE, Animation.BILLOW));
+        catalog.add(new Cosmetic("cape_rainbow", Type.CAPE, List.of("default"), Animation.RAINBOW, Animation.WAVE));
+        catalog.add(new Cosmetic("wings_feather", Type.WINGS, List.of("angel", "demon", "ember", "ice"), Animation.FLOAT, Animation.WAVE, Animation.BURST, Animation.NONE));
+        catalog.add(new Cosmetic("glasses_square", Type.GLASSES, List.of("dark", "neon", "gold", "pink"), Animation.NONE, Animation.PULSE, Animation.SCAN));
+        catalog.add(new Cosmetic("glasses_round", Type.GLASSES, List.of("dark", "neon", "gold", "pink"), Animation.WAVE, Animation.SCAN, Animation.PULSE, Animation.RAINBOW));
+        catalog.add(new Cosmetic("aura_glow", Type.AURA, List.of("light", "flame", "frost", "void", "nature"), Animation.SWIRL, Animation.RISE, Animation.BURST, Animation.PULSE));
+        catalog.add(new Cosmetic("trail_particles", Type.TRAIL, List.of("rainbow", "fire", "ice", "stardust", "soul", "magic"), Animation.FLOW, Animation.COMET, Animation.WAVE));
     }
 
     public void tick() { ticks++; }
@@ -120,7 +120,7 @@ public class CosmeticManager {
         try (InputStream in = Files.newInputStream(file)) { img = NativeImage.read(in); }
         Identifier tex = Identifier.of("myclient", "capes/" + slug);
         MinecraftClient.getInstance().getTextureManager().registerTexture(tex, new NativeImageBackedTexture(img));
-        Cosmetic c = new Cosmetic(id, Type.CAPE, List.of("custom"), Animation.WAVE);
+        Cosmetic c = new Cosmetic(id, Type.CAPE, List.of("custom"), Animation.WAVE, Animation.BILLOW, Animation.NONE, Animation.RAINBOW);
         c.custom = true;
         c.texture = tex;
         c.file = file;
@@ -150,6 +150,7 @@ public class CosmeticManager {
         uploadedSkies.remove(name);
         skies.remove(name);
         if (name.equals(activeSky)) activeSky = "Default";
+        dev.myclient.fx.SkyBox.forget(name);
         try { if (f != null) Files.deleteIfExists(f); } catch (IOException ignored) {}
     }
 

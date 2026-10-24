@@ -2,17 +2,20 @@ package dev.myclient.gui;
 
 import dev.myclient.Config;
 import dev.myclient.MyClient;
+import dev.myclient.Settings;
 import dev.myclient.builder.SchematicBuilder;
 import dev.myclient.cosmetic.Cosmetic;
 import dev.myclient.cosmetic.Cosmetic.Animation;
 import dev.myclient.cosmetic.Cosmetic.Type;
 import dev.myclient.cosmetic.Palette;
+import dev.myclient.cosmetic.Preview;
 import dev.myclient.macro.Macro;
 import dev.myclient.module.Module;
 import dev.myclient.texture.TextureLab;
 import dev.myclient.util.FilePicker;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.option.Perspective;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
@@ -25,13 +28,13 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.function.Consumer;
 
-/** Meteor-style GUI: small floating windows you can drag, collapse, open and close. */
+/** Compact floating-window menu: drag the title bars, collapse, close, open from the dock at the top. */
 public class ClientScreen extends Screen {
 
     public enum Tab {
-        MODS("Mods", 200, 160), COSMETICS("Cosmetics", 250, 280), SKIES("Skies", 240, 240), MACROS("Macros", 260, 220),
-        EDITOR("Editor", 260, 310), TEXTURES("Textures", 290, 340), BUILDER("Builder", 290, 310),
-        TRACERS("Tracers", 260, 320), SEARCH("Search", 260, 310);
+        MODS("Mods", 170, 250), COSMETICS("Cosmetics", 230, 300), SKIES("Skies", 210, 270), MACROS("Macros", 240, 240),
+        EDITOR("Editor", 240, 340), TEXTURES("Textures", 270, 350), BUILDER("Builder", 270, 330),
+        TRACERS("Tracers", 240, 340), EFFECTS("Effects", 200, 270), SEARCH("Search", 240, 330);
         final String label;
         final int w, h;
         Tab(String l, int w, int h) { label = l; this.w = w; this.h = h; }
@@ -44,7 +47,7 @@ public class ClientScreen extends Screen {
         boolean open, collapsed;
         float scroll;
         int contentH;
-        int lx, ly, lw, lh, listScroll;   // inner list rectangle + scroll
+        int lx, ly, lw, lh, listScroll;
     }
 
     private enum Tool {
@@ -53,14 +56,13 @@ public class ClientScreen extends Screen {
         Tool(String l) { label = l; }
     }
 
-    private static final int TITLE = 26;
-    private static final Type[] EDITABLE = {Type.HALO, Type.HEADBAND, Type.CAPE, Type.WINGS, Type.GLASSES, Type.AURA};
+    private static final int TITLE = 24;
 
-    // ---- theme ----
-    private static final int PANEL_TOP = 0xF0181C33, PANEL_BOT = 0xF00E1120, BORDER = 0xFF2D3556;
-    private static final int CARD = 0xFF1B2038, CARD_HOVER = 0xFF232A48, TILE = 0xFF11152A;
-    private static final int ACCENT = 0xFF7C5CFF, ACCENT2 = 0xFF3DD6FF;
-    private static final int TEXT = 0xFFEAECF8, MUTED = 0xFF8B92B0, OFF = 0xFF343A58, DANGER = 0xFFFF5470;
+    // ---- theme (flat, dark, violet + cyan) ----
+    private static final int PANEL = 0xF2101018, BORDER = 0xFF25253A;
+    private static final int CARD = 0xFF181824, CARD_HOVER = 0xFF212132, TILE = 0xFF0C0C14;
+    private static final int ACCENT = 0xFFB06CFF, ACCENT2 = 0xFF55D6FF;
+    private static final int TEXT = 0xFFECECF6, MUTED = 0xFF8A8AA6, OFF = 0xFF34344A, DANGER = 0xFFFF5470;
 
     // ---- persistent (static) state ----
     private static final List<Win> WINS = new ArrayList<>();
@@ -80,10 +82,11 @@ public class ClientScreen extends Screen {
     private static List<String> blockFiltered;
     private static List<Path> schemFiles = new ArrayList<>();
     private static List<Path> schemFiltered = new ArrayList<>();
+    private static float pendingScale = -1f;
 
     private static Type draftType = Type.HALO;
-    private static Animation draftAnim = Animation.SPIN;
-    private static float dr = 124, dg = 92, db = 255, dspeed = 1f;
+    private static Animation draftAnim = Animation.FLOAT;
+    private static float dr = 176, dg = 108, db = 255, dspeed = 1f;
 
     static {
         texBox.onChange = s -> refilterTextures();
@@ -91,7 +94,6 @@ public class ClientScreen extends Screen {
         schemBox.onChange = s -> refilterSchematics();
     }
 
-    // ---- per-screen state ----
     private record Hit(Win win, int x, int y, int w, int h, Runnable run) {
         boolean in(double mx, double my) { return mx >= x && mx < x + w && my >= y && my < y + h; }
     }
@@ -116,8 +118,10 @@ public class ClientScreen extends Screen {
     private boolean painting;
 
     public ClientScreen() {
-        super(Text.literal("MyClient"));
+        super(Text.literal("Lumen"));
     }
+
+    private static float K() { return Settings.guiScale; }
 
     // ======================================================================== windows
     private static void ensureWindows() {
@@ -134,19 +138,17 @@ public class ClientScreen extends Screen {
                 } catch (Exception ignored) {}
             }
         }
-        int i = 0;
         for (Tab t : Tab.values()) {
             final Tab tt = t;
             if (WINS.stream().noneMatch(w -> w.tab == tt)) {
                 Win w = new Win();
                 w.tab = t; w.w = t.w; w.h = t.h;
-                w.x = 24 + (t.ordinal() % 4) * 40 + i * 4;
-                w.y = 44 + (t.ordinal() % 4) * 30;
+                w.x = 20 + (t.ordinal() % 5) * 36;
+                w.y = 40 + (t.ordinal() % 5) * 24;
                 w.open = t == Tab.MODS || t == Tab.COSMETICS;
-                if (t == Tab.COSMETICS) w.x = 240;
+                if (t == Tab.COSMETICS) w.x = 200;
                 WINS.add(w);
             }
-            i++;
         }
     }
 
@@ -177,9 +179,10 @@ public class ClientScreen extends Screen {
     @Override
     protected void init() {
         ensureWindows();
+        int lw = (int) (width / K()), lh = (int) (height / K());
         for (Win w : WINS) {
-            w.x = Math.max(0, Math.min(w.x, Math.max(0, width - w.w)));
-            w.y = Math.max(0, Math.min(w.y, Math.max(0, height - TITLE)));
+            w.x = Math.max(0, Math.min(w.x, Math.max(0, lw - w.w)));
+            w.y = Math.max(0, Math.min(w.y, Math.max(0, lh - TITLE)));
         }
         schemFiles = SchematicBuilder.listFiles();
         refilterSchematics();
@@ -280,41 +283,41 @@ public class ClientScreen extends Screen {
 
     private void pill(DrawContext ctx, int x, int y, int w, int h, String label, boolean primary, Runnable run) {
         boolean hv = hover(x, y, w, h);
-        int base = primary ? (hv ? 0xFF8E72FF : ACCENT) : (hv ? 0xFF2E3660 : 0xFF262C4A);
+        int base = primary ? (hv ? 0xFFC38BFF : ACCENT) : (hv ? 0xFF2C2C42 : 0xFF222234);
         Draw.rr(ctx, x, y, w, h, h / 2f, base);
-        centered(ctx, Ui.trim(label, w - 8), x + w / 2f, y + (h - 9) / 2f, TEXT);
+        centered(ctx, Ui.trim(label, w - 8), x + w / 2f, y + (h - 9) / 2f, primary ? 0xFF14101E : TEXT);
         addHit(x, y, w, h, run);
     }
 
     private void toggle(DrawContext ctx, String key, int x, int y, boolean on, Runnable run) {
         float t = anim(key, on ? 1f : 0f);
-        int w = 36, h = 18;
-        if (t > 0.05f) Draw.rr(ctx, x - 2, y - 2, w + 4, h + 4, 11, Draw.alpha(0x7C5CFF, (int) (50 * t)));
-        Draw.rr(ctx, x, y, w, h, 9, Draw.lerp(OFF, ACCENT, t));
-        Draw.circle(ctx, x + 9 + (w - 18) * t, y + 9, 6.5f, 0xFFFFFFFF);
+        int w = 32, h = 16;
+        if (t > 0.05f) Draw.rr(ctx, x - 2, y - 2, w + 4, h + 4, 10, Draw.alpha(0xB06CFF, (int) (46 * t)));
+        Draw.rr(ctx, x, y, w, h, 8, Draw.lerp(OFF, ACCENT, t));
+        Draw.circle(ctx, x + 8 + (w - 16) * t, y + 8, 5.5f, 0xFFFFFFFF);
         addHit(x, y, w, h, run);
     }
 
     private void slider(DrawContext ctx, String label, int x, int y, int w, float value, float min, float max,
                         String shown, Consumer<Float> setter) {
         text(ctx, label, x, y + 2, MUTED);
-        int tx = x + 44, tw = w - 44 - 34;
+        int tx = x + 44, tw = w - 44 - 40;
         float f = Math.max(0f, Math.min(1f, (value - min) / (max - min)));
-        Draw.rr(ctx, tx, y + 4, tw, 6, 3, OFF);
-        Draw.rr(ctx, tx, y + 4, Math.max(6, tw * f), 6, 3, ACCENT);
-        Draw.circle(ctx, tx + tw * f, y + 7, 6, 0xFFFFFFFF);
-        text(ctx, shown, x + w - 28, y + 2, TEXT);
+        Draw.rr(ctx, tx, y + 4, tw, 5, 2.5f, OFF);
+        Draw.rr(ctx, tx, y + 4, Math.max(5, tw * f), 5, 2.5f, ACCENT);
+        Draw.circle(ctx, tx + tw * f, y + 6.5f, 5.5f, 0xFFFFFFFF);
+        text(ctx, shown, x + w - 34, y + 2, TEXT);
         sliders.add(new Slider(curWin, tx, y, tw, min, max, setter));
     }
 
-    private void updateSlider(Slider s, double mouseX) {
-        float f = Math.max(0f, Math.min(1f, (float) ((mouseX - s.x()) / s.w())));
+    private void updateSlider(Slider s, double lx) {
+        float f = Math.max(0f, Math.min(1f, (float) ((lx - s.x()) / s.w())));
         s.set().accept(s.min() + (s.max() - s.min()) * f);
     }
 
     private void box(DrawContext ctx, TextBox b, int x, int y, int w, int h) {
         boolean f = focus == b;
-        Draw.rr(ctx, x - 1, y - 1, w + 2, h + 2, (h + 2) / 2f, f ? ACCENT : 0xFF2A3050);
+        Draw.rr(ctx, x - 1, y - 1, w + 2, h + 2, (h + 2) / 2f, f ? ACCENT : 0xFF2A2A40);
         Draw.rr(ctx, x, y, w, h, h / 2f, TILE);
         int avail = w - 22;
         int start = 0;
@@ -345,12 +348,21 @@ public class ClientScreen extends Screen {
                     Draw.rect(ctx, x + i * p, y + j * p, (k - i) * p, p, col);
                     i = k;
                 } else {
-                    if (checker) Draw.rect(ctx, x + i * p, y + j * p, p, p, ((i + j) & 1) == 0 ? 0xFF2A2F4A : 0xFF353B5C);
+                    if (checker) Draw.rect(ctx, x + i * p, y + j * p, p, p, ((i + j) & 1) == 0 ? 0xFF2A2A44 : 0xFF353552);
                     if (a > 0) Draw.rect(ctx, x + i * p, y + j * p, p, p, col);
                     i++;
                 }
             }
         }
+    }
+
+    private void settingRow(DrawContext ctx, int y, String label, String sub, boolean on, Runnable run) {
+        boolean hv = hover(cx, y, cw, 30);
+        Draw.rr(ctx, cx, y, cw, 30, 8, hv ? CARD_HOVER : CARD);
+        text(ctx, Ui.trim(label, cw - 56), cx + 9, y + 4, TEXT);
+        if (sub != null) text(ctx, Ui.trim(sub, cw - 56), cx + 9, y + 17, MUTED);
+        addHit(cx, y, cw, 30, run);
+        toggle(ctx, "set:" + label, cx + cw - 40, y + 7, on, run);
     }
 
     // ======================================================================== icons
@@ -374,7 +386,7 @@ public class ClientScreen extends Screen {
                 float w = size * 0.8f, h = Math.max(6, size * 0.22f);
                 float p = an == Animation.PULSE ? 0.65f + 0.35f * (float) Math.sin(t * 4) : 1f;
                 int cc = Draw.scale(col, p);
-                float sway = (an == Animation.WAVE || an == Animation.FLOAT) ? (float) Math.sin(t * 4) * 3 : 1;
+                float sway = (an == Animation.WHIP || an == Animation.FLOW) ? (float) Math.sin(t * 5) * 3 : 1;
                 Draw.rr(ctx, mid + w / 2 - 6, midY, 5, size / 3f, 2, Draw.scale(cc, 0.85f));
                 Draw.rr(ctx, mid + w / 2 - 1 + sway, midY + 2, 5, size / 3f, 2, cc);
                 Draw.rr(ctx, mid - w / 2, midY - h / 2 - 2, w, h, h / 2, cc);
@@ -383,8 +395,7 @@ public class ClientScreen extends Screen {
                 float w = size * 0.55f, h = size * 0.85f, top = midY - h / 2;
                 for (int r = 0; r < h; r += 2) {
                     float f = r / h;
-                    float off = an == Animation.WAVE ? (float) Math.sin(t * 3 + r * 0.15f) * 3 * f
-                        : an == Animation.FLOAT ? (float) Math.sin(t * 2) * 2 * f : 0;
+                    float off = (an == Animation.WAVE || an == Animation.BILLOW) ? (float) Math.sin(t * 3 + r * 0.15f) * 3 * f : 0;
                     int rc = an == Animation.RAINBOW ? 0xFF000000 | Palette.rainbow(t * 0.2f + f * 0.5f, 0.75f, 1f) : Draw.scale(col, 1f - 0.45f * f);
                     float inset = r < 3 ? 3 - r : 0;
                     Draw.rect(ctx, mid - w / 2 + off + inset, top + r, w - inset * 2, 2, rc);
@@ -432,8 +443,10 @@ public class ClientScreen extends Screen {
     // ======================================================================== main render
     @Override
     public void renderBackground(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        mx = mouseX;
-        my = mouseY;
+        float K = K();
+        int lw = (int) (width / K), lh = (int) (height / K);
+        mx = (int) (mouseX / K);
+        my = (int) (mouseY / K);
         hits.clear();
         sliders.clear();
         boxes.clear();
@@ -446,86 +459,84 @@ public class ClientScreen extends Screen {
             Win w = WINS.get(i);
             if (!w.open) continue;
             int hh = w.collapsed ? TITLE : w.h;
-            if (mouseX >= w.x && mouseX < w.x + w.w && mouseY >= w.y && mouseY < w.y + hh) { topAtMouse = w; break; }
+            if (mx >= w.x && mx < w.x + w.w && my >= w.y && my < w.y + hh) { topAtMouse = w; break; }
         }
 
-        // dock
         curWin = null;
         clipY0 = 0;
-        clipY1 = height;
-        Draw.begin(ctx, s);
-        ctx.fillGradient(0, 0, Math.round(width * s), Math.round(height * s), 0x60060812, 0x90160C2C);
+        clipY1 = lh;
+        Draw.begin(ctx, s, K);
+        ctx.fillGradient(0, 0, Math.round(width * s), Math.round(height * s), 0x50050508, 0x80100820);
         int total = 0;
-        for (Tab t : Tab.values()) total += Ui.width(t.label) + 18 + 4;
-        int dx = (width - total) / 2;
-        Draw.rr(ctx, dx - 6, 3, total + 8, 26, 13, 0xE0141830);
+        for (Tab t : Tab.values()) total += Ui.width(t.label) + 16 + 3;
+        int dx = (lw - total) / 2;
+        Draw.rr(ctx, dx - 5, 3, total + 7, 24, 12, 0xE60E0E16);
         int tx = dx;
         for (Tab t : Tab.values()) {
-            int w = Ui.width(t.label) + 18;
+            int w = Ui.width(t.label) + 16;
             Win win = win(t);
             boolean open = win != null && win.open;
-            boolean hv = hover(tx, 7, w, 18);
-            if (open) Draw.rrGrad(ctx, tx, 7, w, 18, 9, ACCENT, 0xFF5A3FD6);
-            else Draw.rr(ctx, tx, 7, w, 18, 9, hv ? 0xFF262D4C : 0xFF1B2038);
-            centered(ctx, t.label, tx + w / 2f, 11, open ? 0xFFFFFFFF : (hv ? TEXT : MUTED));
+            boolean hv = hover(tx, 7, w, 16);
+            if (open) Draw.rr(ctx, tx, 7, w, 16, 8, ACCENT);
+            else Draw.rr(ctx, tx, 7, w, 16, 8, hv ? 0xFF262638 : 0xFF161622);
+            centered(ctx, t.label, tx + w / 2f, 10, open ? 0xFF14101E : (hv ? TEXT : MUTED));
             final Tab target = t;
-            addHit(tx, 7, w, 18, () -> {
+            addHit(tx, 7, w, 16, () -> {
                 Win ww = win(target);
                 if (ww.open && WINS.get(WINS.size() - 1) == ww) ww.open = false;
                 else openWindow(target);
             });
-            tx += w + 4;
+            tx += w + 3;
         }
         Draw.end(ctx);
 
-        for (Win w : new ArrayList<>(WINS)) if (w.open) renderWindow(ctx, w, s);
+        for (Win w : new ArrayList<>(WINS)) if (w.open) renderWindow(ctx, w, s, K);
         curWin = null;
         clipY0 = 0;
-        clipY1 = height;
+        clipY1 = lh;
 
         if (System.currentTimeMillis() < toastUntil) {
-            Draw.begin(ctx, s);
-            int tw = Ui.width(toast) + 26;
-            Draw.rr(ctx, width / 2f - tw / 2f, height - 34, tw, 22, 11, 0xEE2A2F52);
-            centered(ctx, toast, width / 2f, height - 28, TEXT);
+            Draw.begin(ctx, s, K);
+            int tw = Ui.width(toast) + 24;
+            Draw.rr(ctx, lw / 2f - tw / 2f, lh - 34, tw, 20, 10, 0xEE24243C);
+            centered(ctx, toast, lw / 2f, lh - 29, TEXT);
             Draw.end(ctx);
         }
     }
 
-    private void renderWindow(DrawContext ctx, Win w, float s) {
+    private void renderWindow(DrawContext ctx, Win w, float s, float K) {
         curWin = w;
+        int lh = (int) (height / K);
         clipY0 = 0;
-        clipY1 = height;
+        clipY1 = lh;
         int x = (int) w.x, y = (int) w.y;
         int hh = w.collapsed ? TITLE : w.h;
-        Draw.begin(ctx, s);
-        Draw.rr(ctx, x - 2, y - 2, w.w + 4, hh + 4, 14, 0x30000000);
-        Draw.rr(ctx, x - 1, y - 1, w.w + 2, hh + 2, 13, BORDER);
-        Draw.rrGrad(ctx, x, y, w.w, hh, 12, PANEL_TOP, PANEL_BOT);
-        Draw.rr(ctx, x + 12, y + TITLE - 3, 18, 2, 1, ACCENT);
-        text(ctx, w.tab.label, x + 12, y + 7, TEXT);
-        int bx = x + w.w - 16, by = y + TITLE / 2;
+        Draw.begin(ctx, s, K);
+        Draw.rr(ctx, x - 3, y - 3, w.w + 6, hh + 6, 12, 0x28000000);
+        Draw.rr(ctx, x - 1, y - 1, w.w + 2, hh + 2, 10, BORDER);
+        Draw.rr(ctx, x, y, w.w, hh, 9, PANEL);
+        Draw.circle(ctx, x + 12, y + TITLE / 2f, 3, ACCENT);
+        text(ctx, w.tab.label, x + 22, y + 7, TEXT);
+        int bx = x + w.w - 14, by = y + TITLE / 2;
         boolean hc = hover(bx - 7, by - 7, 14, 14), hm = hover(bx - 25, by - 7, 14, 14);
-        Draw.circle(ctx, bx, by, 6.5f, hc ? 0xFF6A2A40 : 0xFF2A2236);
-        Draw.circle(ctx, bx - 18, by, 6.5f, hm ? 0xFF3A4676 : 0xFF262C4A);
-        Draw.rect(ctx, bx - 21, by - 0.5f, 6, 1.4f, TEXT);
-        if (w.collapsed) Draw.rect(ctx, bx - 18.7f, by - 3, 1.4f, 6, TEXT);
+        Draw.circle(ctx, bx, by, 5.5f, hc ? 0xFFFF5470 : 0xFF3A3A52);
+        Draw.circle(ctx, bx - 17, by, 5.5f, hm ? 0xFF55D6FF : 0xFF3A3A52);
         addHit(bx - 7, by - 7, 14, 14, () -> w.open = false);
         addHit(bx - 25, by - 7, 14, 14, () -> w.collapsed = !w.collapsed);
         Draw.end(ctx);
         if (w.collapsed) return;
 
-        cx = x + 10;
-        cy = y + TITLE + 2;
-        cw = w.w - 20;
-        ch = w.h - TITLE - 8;
+        cx = x + 9;
+        cy = y + TITLE + 3;
+        cw = w.w - 18;
+        ch = w.h - TITLE - 9;
         clipY0 = cy;
         clipY1 = cy + ch;
         w.scroll = Math.max(0, Math.min(w.scroll, Math.max(0, w.contentH - ch)));
         int y0 = cy - (int) w.scroll;
 
-        ctx.enableScissor(x + 3, cy, x + w.w - 3, cy + ch);
-        Draw.begin(ctx, s);
+        ctx.enableScissor((int) ((x + 3) * K), (int) (cy * K), (int) ((x + w.w - 3) * K), (int) ((cy + ch) * K));
+        Draw.begin(ctx, s, K);
         int h = switch (w.tab) {
             case MODS -> renderMods(ctx, w, y0);
             case COSMETICS -> renderCosmetics(ctx, w, y0);
@@ -535,43 +546,38 @@ public class ClientScreen extends Screen {
             case TEXTURES -> renderTextures(ctx, w, y0);
             case BUILDER -> renderBuilder(ctx, w, y0);
             case TRACERS -> renderTracers(ctx, w, y0);
+            case EFFECTS -> renderEffects(ctx, w, y0);
             case SEARCH -> renderSearch(ctx, w, y0);
         };
         w.contentH = h;
         if (h > ch) {
             int barH = Math.max(20, (int) ((long) ch * ch / h));
             int barY = cy + (int) ((ch - barH) * (w.scroll / Math.max(1, h - ch)));
-            Draw.rr(ctx, x + w.w - 8, barY, 3, barH, 1.5f, 0xFF3A4166);
+            Draw.rr(ctx, x + w.w - 7, barY, 3, barH, 1.5f, 0xFF3A3A58);
         }
         Draw.end(ctx);
         ctx.disableScissor();
         clipY0 = 0;
-        clipY1 = height;
+        clipY1 = lh;
     }
 
     // ======================================================================== MODS
-    private static String desc(Module m) {
-        return switch (m.name) {
-            case "Fullbright" -> "Always bright, even in caves";
-            case "Motion Blur" -> "Smooth camera - coming soon";
-            case "Tracers" -> "Lines to the blocks you pick";
-            default -> "";
-        };
-    }
-
     private int renderMods(DrawContext ctx, Win w, int y0) {
         int y = y0;
         for (Module m : MyClient.MODULES.all) {
-            int h = 44;
+            boolean hasSlider = m.settingLabel != null;
+            int h = hasSlider ? 44 : 26;
             boolean hv = hover(cx, y, cw, h);
-            Draw.rr(ctx, cx, y, cw, h, 12, hv ? CARD_HOVER : CARD);
-            Draw.circle(ctx, cx + 22, y + 22, 12, m.isEnabled() ? ACCENT : OFF);
-            centered(ctx, m.name.substring(0, 1), cx + 22, y + 17, 0xFFFFFFFF);
-            text(ctx, m.name, cx + 42, y + 8, TEXT);
-            text(ctx, Ui.trim(desc(m), cw - 42 - 50), cx + 42, y + 23, MUTED);
-            addHit(cx, y, cw, h, m::toggle);
-            toggle(ctx, "mod:" + m.name, cx + cw - 44, y + 13, m.isEnabled(), m::toggle);
-            y += h + 6;
+            Draw.rr(ctx, cx, y, cw, h, 8, hv ? CARD_HOVER : CARD);
+            Draw.circle(ctx, cx + 11, y + 13, 3, m.isEnabled() ? ACCENT : OFF);
+            text(ctx, Ui.trim(m.name, cw - 70), cx + 22, y + 8, m.isEnabled() ? TEXT : 0xFFB8B8D0);
+            addHit(cx, y, cw, 26, m::toggle);
+            toggle(ctx, "mod:" + m.name, cx + cw - 40, y + 5, m.isEnabled(), m::toggle);
+            if (hasSlider) {
+                slider(ctx, m.settingLabel, cx + 9, y + 27, cw - 18, m.settingValue, m.settingMin, m.settingMax,
+                    String.format("%.1f", m.settingValue) + m.settingUnit, v -> m.settingValue = Math.round(v * 10f) / 10f);
+            }
+            y += h + 4;
         }
         return y - y0;
     }
@@ -607,39 +613,36 @@ public class ClientScreen extends Screen {
     }
 
     private int renderCosmetics(DrawContext ctx, Win w, int y0) {
-        pill(ctx, cx, y0, cw, 22, "Upload cape (.png)", true, this::pickCape);
-        text(ctx, Ui.trim("or drop a .png onto the window", cw), cx + 2, y0 + 27, MUTED);
-        int top = y0 + 44, cardH = 88;
+        pill(ctx, cx, y0, cw, 20, "Upload cape (.png)", true, this::pickCape);
+        text(ctx, Ui.trim("or drop a .png onto the window", cw), cx + 2, y0 + 24, MUTED);
+        int top = y0 + 40, cardH = 84;
         List<Cosmetic> list = new ArrayList<>(MyClient.COSMETICS.catalog);
         for (int i = 0; i < list.size(); i++) {
             Cosmetic c = list.get(i);
-            int x = cx, y = top + i * (cardH + 8);
+            int x = cx, y = top + i * (cardH + 6);
             if (y + cardH < cy || y > cy + ch) continue;
             boolean on = MyClient.COSMETICS.isEquipped(c);
             boolean hv = hover(x, y, cw, cardH);
-            if (on) Draw.rr(ctx, x - 1, y - 1, cw + 2, cardH + 2, 13, ACCENT);
-            Draw.rr(ctx, x, y, cw, cardH, 12, hv ? CARD_HOVER : CARD);
+            if (on) Draw.rr(ctx, x - 1, y - 1, cw + 2, cardH + 2, 10, ACCENT);
+            Draw.rr(ctx, x, y, cw, cardH, 9, hv ? CARD_HOVER : CARD);
             addHit(x, y, cw, cardH, () -> MyClient.COSMETICS.toggle(c));
-            Draw.rr(ctx, x + 8, y + 12, 60, 60, 10, TILE);
-            drawIcon(ctx, c.type, c.animation, Palette.rgb(c), x + 38, y + 42, 46, c.speed);
-            text(ctx, Ui.trim(pretty(c.id), cw - 76 - 50), x + 76, y + 8, TEXT);
-            text(ctx, nice(c.type) + (c.type == Type.TRAIL ? "" : " - " + nice(c.animation)), x + 76, y + 22, MUTED);
-            toggle(ctx, "cos:" + c.id, x + cw - 44, y + 8, on, () -> MyClient.COSMETICS.toggle(c));
+            Draw.rr(ctx, x + 7, y + 11, 58, 58, 8, TILE);
+            drawIcon(ctx, c.type, c.animation, Palette.rgb(c), x + 36, y + 40, 44, c.speed);
+            text(ctx, Ui.trim(pretty(c.id), cw - 72 - 44), x + 72, y + 7, TEXT);
+            text(ctx, nice(c.type) + (c.type == Type.TRAIL ? "" : " - " + Cosmetic.label(c.type, c.animation)), x + 72, y + 20, MUTED);
+            toggle(ctx, "cos:" + c.id, x + cw - 40, y + 6, on, () -> MyClient.COSMETICS.toggle(c));
             for (int v = 0; v < c.variants.size(); v++) {
                 String variant = c.variants.get(v);
-                int sx = x + 84 + v * 18, sy = y + 48;
+                int sx = x + 79 + v * 17, sy = y + 44;
                 boolean sel = variant.equals(c.activeVariant);
-                if (sel) Draw.circle(ctx, sx, sy, 8, 0xFFFFFFFF);
-                Draw.circle(ctx, sx, sy, 6, 0xFF000000 | Palette.swatch(c, variant));
+                if (sel) Draw.circle(ctx, sx, sy, 7.5f, 0xFFFFFFFF);
+                Draw.circle(ctx, sx, sy, 5.5f, 0xFF000000 | Palette.swatch(c, variant));
                 addHit(sx - 8, sy - 8, 16, 16, () -> c.activeVariant = variant);
             }
-            if (c.type != Type.TRAIL) {
-                pill(ctx, x + 76, y + 62, Math.min(110, cw - 108), 18, "Anim: " + nice(c.animation), false, () ->
-                    c.animation = Animation.values()[(c.animation.ordinal() + 1) % Animation.values().length]);
-            }
+            pill(ctx, x + 72, y + 58, Math.min(120, cw - 100), 17, "Anim: " + Cosmetic.label(c.type, c.animation), false, c::nextAnimation);
             if (c.custom) {
-                int dx = x + cw - 16, dy = y + cardH - 14;
-                Draw.circle(ctx, dx, dy, 8, 0xFF3A2433);
+                int dx = x + cw - 14, dy = y + cardH - 13;
+                Draw.circle(ctx, dx, dy, 7, 0xFF3A2433);
                 centered(ctx, "x", dx, dy - 5, DANGER);
                 addHit(dx - 8, dy - 8, 16, 16, () -> {
                     MyClient.COSMETICS.equipped.remove(c.id);
@@ -648,7 +651,7 @@ public class ClientScreen extends Screen {
                 });
             }
         }
-        return 44 + list.size() * (cardH + 8);
+        return 40 + list.size() * (cardH + 6);
     }
 
     // ======================================================================== SKIES
@@ -661,43 +664,40 @@ public class ClientScreen extends Screen {
             case "Aurora" -> new int[]{0xFF0B2F3B, 0xFF2AF598};
             case "Starry Night" -> new int[]{0xFF050B24, 0xFF1C2D6B};
             case "Nebula" -> new int[]{0xFF2A0A3A, 0xFFE04FBF};
+            case "Blood Moon" -> new int[]{0xFF0A0204, 0xFFC4302B};
+            case "Lumen" -> new int[]{0xFF050B1E, 0xFF2B6BD6};
             default -> new int[]{0xFF78A7FF, 0xFFC8E0FF};
         };
     }
 
     private int renderSkies(DrawContext ctx, Win w, int y0) {
-        pill(ctx, cx, y0, cw, 22, "Upload sky (.png)", true, this::pickSky);
-        text(ctx, Ui.trim("or drop a .png onto the window", cw), cx + 2, y0 + 27, MUTED);
-        int yy = y0 + 44;
-        for (String line : wrap("Not shown in the world yet - your choice is only saved.", cw)) {
-            text(ctx, line, cx + 2, yy, 0xFFC9B8FF);
-            yy += 12;
-        }
-        int top = yy + 4, cardH = 60;
+        pill(ctx, cx, y0, cw, 20, "Upload sky (.png)", true, this::pickSky);
+        text(ctx, Ui.trim("or drop a .png (2:1 panorama works best)", cw), cx + 2, y0 + 24, MUTED);
+        int top = y0 + 40, cardH = 56;
         List<String> skies = new ArrayList<>(MyClient.COSMETICS.skies);
         for (int i = 0; i < skies.size(); i++) {
             String s = skies.get(i);
-            int y = top + i * (cardH + 8);
+            int y = top + i * (cardH + 6);
             if (y + cardH < cy || y > cy + ch) continue;
             boolean sel = s.equals(MyClient.COSMETICS.activeSky);
             boolean hv = hover(cx, y, cw, cardH);
-            if (sel) Draw.rr(ctx, cx - 1, y - 1, cw + 2, cardH + 2, 13, ACCENT);
-            Draw.rr(ctx, cx, y, cw, cardH, 12, hv ? CARD_HOVER : CARD);
+            if (sel) Draw.rr(ctx, cx - 1, y - 1, cw + 2, cardH + 2, 10, ACCENT);
+            Draw.rr(ctx, cx, y, cw, cardH, 9, hv ? CARD_HOVER : CARD);
             int[] cc = skyColors(s);
-            Draw.rrGrad(ctx, cx + 8, y + 8, 64, cardH - 16, 9, cc[0], cc[1]);
-            text(ctx, Ui.trim(s, cw - 80 - 30), cx + 82, y + 14, TEXT);
-            text(ctx, sel ? "Selected" : "Click to select", cx + 82, y + 30, sel ? ACCENT2 : MUTED);
-            Draw.circle(ctx, cx + cw - 18, y + 20, 8, sel ? ACCENT : OFF);
-            if (sel) Draw.circle(ctx, cx + cw - 18, y + 20, 3.5f, 0xFFFFFFFF);
+            Draw.rrGrad(ctx, cx + 7, y + 7, 62, cardH - 14, 7, cc[0], cc[1]);
+            text(ctx, Ui.trim(s, cw - 80 - 26), cx + 78, y + 12, TEXT);
+            text(ctx, sel ? "Active" : "Click to use", cx + 78, y + 27, sel ? ACCENT2 : MUTED);
+            Draw.circle(ctx, cx + cw - 16, y + 17, 7, sel ? ACCENT : OFF);
+            if (sel) Draw.circle(ctx, cx + cw - 16, y + 17, 3, 0xFFFFFFFF);
             addHit(cx, y, cw, cardH, () -> MyClient.COSMETICS.activeSky = s);
             if (MyClient.COSMETICS.uploadedSkies.containsKey(s)) {
-                int dx = cx + cw - 18, dy = y + cardH - 14;
-                Draw.circle(ctx, dx, dy, 7, 0xFF3A2433);
+                int dx = cx + cw - 16, dy = y + cardH - 13;
+                Draw.circle(ctx, dx, dy, 6.5f, 0xFF3A2433);
                 centered(ctx, "x", dx, dy - 5, DANGER);
                 addHit(dx - 8, dy - 8, 16, 16, () -> MyClient.COSMETICS.removeSky(s));
             }
         }
-        return top - y0 + skies.size() * (cardH + 8);
+        return 40 + skies.size() * (cardH + 6);
     }
 
     // ======================================================================== MACROS
@@ -708,22 +708,20 @@ public class ClientScreen extends Screen {
 
     private int renderMacros(DrawContext ctx, Win w, int y0) {
         List<Macro> ms = MyClient.MACROS.macros;
-        text(ctx, "Macros", cx + 2, y0 + 5, TEXT);
         if (ms.size() < 6) {
-            pill(ctx, cx + cw - 104, y0, 104, 22, "+ New macro", true, () ->
-                ms.add(new Macro("Macro " + (ms.size() + 1), GLFW.GLFW_KEY_G, "", 0)));
+            pill(ctx, cx, y0, cw, 20, "+ New macro", true, () -> ms.add(new Macro("Macro " + (ms.size() + 1), GLFW.GLFW_KEY_G, "", 0)));
         }
-        if (ms.isEmpty()) centered(ctx, "No macros yet.", cx + cw / 2f, y0 + 80, MUTED);
+        if (ms.isEmpty()) centered(ctx, "No macros yet.", cx + cw / 2f, y0 + 70, MUTED);
         for (int i = 0; i < ms.size(); i++) {
             Macro m = ms.get(i);
-            int ry = y0 + 30 + i * 66;
-            Draw.rr(ctx, cx, ry, cw, 60, 12, CARD);
-            text(ctx, Ui.trim(m.name, 70), cx + 10, ry + 9, TEXT);
-            pill(ctx, cx + 82, ry + 5, 66, 20, capturing == m ? "press key" : keyLabel(m.keyCode), capturing == m, () -> capturing = m);
-            toggle(ctx, "mac:" + System.identityHashCode(m), cx + cw - 78, ry + 6, m.enabled, () -> m.enabled = !m.enabled);
-            int dx = cx + cw - 20, dy = ry + 15;
+            int ry = y0 + 28 + i * 60;
+            Draw.rr(ctx, cx, ry, cw, 54, 9, CARD);
+            text(ctx, Ui.trim(m.name, 64), cx + 9, ry + 8, TEXT);
+            pill(ctx, cx + 76, ry + 4, 60, 18, capturing == m ? "press key" : keyLabel(m.keyCode), capturing == m, () -> capturing = m);
+            toggle(ctx, "mac:" + System.identityHashCode(m), cx + cw - 64, ry + 5, m.enabled, () -> m.enabled = !m.enabled);
+            int dx = cx + cw - 15, dy = ry + 13;
             boolean hv = hover(dx - 9, dy - 9, 18, 18);
-            Draw.circle(ctx, dx, dy, 9, hv ? 0xFF4A2A3C : 0xFF2A2236);
+            Draw.circle(ctx, dx, dy, 7.5f, hv ? 0xFF4A2A3C : 0xFF2A2236);
             centered(ctx, "x", dx, dy - 5, DANGER);
             addHit(dx - 9, dy - 9, 18, 18, () -> ms.remove(m));
             TextBox b = macroBoxes.computeIfAbsent(m, k -> {
@@ -732,32 +730,47 @@ public class ClientScreen extends Screen {
                 nb.onChange = s -> k.command = s;
                 return nb;
             });
-            box(ctx, b, cx + 8, ry + 31, cw - 16, 22);
+            box(ctx, b, cx + 7, ry + 28, cw - 14, 20);
         }
-        return 30 + Math.max(1, ms.size()) * 66;
+        return 28 + Math.max(1, ms.size()) * 60;
     }
 
     // ======================================================================== EDITOR
     private int renderEditor(DrawContext ctx, Win w, int y0) {
-        text(ctx, "Name", cx + 2, y0, MUTED);
-        box(ctx, nameBox, cx, y0 + 14, cw, 22);
-        int half = (cw - 8) / 2;
-        pill(ctx, cx, y0 + 44, half, 22, "Type: " + nice(draftType), false, () -> {
-            int i = 0;
-            for (int k = 0; k < EDITABLE.length; k++) if (EDITABLE[k] == draftType) i = k;
-            draftType = EDITABLE[(i + 1) % EDITABLE.length];
-        });
-        pill(ctx, cx + half + 8, y0 + 44, half, 22, "Anim: " + nice(draftAnim), false,
-            () -> draftAnim = Animation.values()[(draftAnim.ordinal() + 1) % Animation.values().length]);
-        slider(ctx, "Red", cx, y0 + 76, cw, dr, 0, 255, String.valueOf((int) dr), v -> dr = v);
-        slider(ctx, "Green", cx, y0 + 98, cw, dg, 0, 255, String.valueOf((int) dg), v -> dg = v);
-        slider(ctx, "Blue", cx, y0 + 120, cw, db, 0, 255, String.valueOf((int) db), v -> db = v);
-        slider(ctx, "Speed", cx, y0 + 142, cw, dspeed, 0.2f, 3f, String.format("%.1fx", dspeed), v -> dspeed = v);
-        pill(ctx, cx, y0 + 168, cw, 26, "Create accessory", true, this::createDraft);
-        Draw.rr(ctx, cx, y0 + 204, cw, 96, 14, TILE);
         int rgb = ((int) dr << 16) | ((int) dg << 8) | (int) db;
-        drawIcon(ctx, draftType, draftAnim, rgb, cx + cw / 2f, y0 + 252, 64, dspeed);
-        return 312;
+        Preview.update(draftType, draftAnim, rgb, dspeed);
+
+        Draw.rr(ctx, cx, y0, cw, 84, 10, TILE);
+        drawIcon(ctx, draftType, draftAnim, rgb, cx + cw / 2f, y0 + 42, 62, dspeed);
+        text(ctx, "Preview", cx + 8, y0 + 6, MUTED);
+
+        text(ctx, "Show on my character (third person)", cx + 2, y0 + 92, TEXT);
+        toggle(ctx, "preview", cx + cw - 36, y0 + 102, Preview.enabled, () -> {
+            Preview.enabled = !Preview.enabled;
+            if (Preview.enabled) client.options.setPerspective(Perspective.THIRD_PERSON_BACK);
+        });
+        text(ctx, Preview.enabled ? "Live on your character - move the sliders" : "Turn on to see it on you", cx + 2, y0 + 106, MUTED);
+
+        int y = y0 + 126;
+        box(ctx, nameBox, cx, y, cw, 22);
+        int half = (cw - 6) / 2;
+        pill(ctx, cx, y + 30, half, 20, "Type: " + nice(draftType), false, () -> {
+            Type[] all = {Type.HALO, Type.HEADBAND, Type.CAPE, Type.WINGS, Type.GLASSES, Type.AURA};
+            int i = 0;
+            for (int k = 0; k < all.length; k++) if (all[k] == draftType) i = k;
+            draftType = all[(i + 1) % all.length];
+            draftAnim = Cosmetic.defaultAnims(draftType).get(0);
+        });
+        pill(ctx, cx + half + 6, y + 30, half, 20, Cosmetic.label(draftType, draftAnim), false, () -> {
+            List<Animation> l = Cosmetic.defaultAnims(draftType);
+            draftAnim = l.get((Math.max(0, l.indexOf(draftAnim)) + 1) % l.size());
+        });
+        slider(ctx, "Red", cx, y + 60, cw, dr, 0, 255, String.valueOf((int) dr), v -> dr = v);
+        slider(ctx, "Green", cx, y + 80, cw, dg, 0, 255, String.valueOf((int) dg), v -> dg = v);
+        slider(ctx, "Blue", cx, y + 100, cw, db, 0, 255, String.valueOf((int) db), v -> db = v);
+        slider(ctx, "Speed", cx, y + 120, cw, dspeed, 0.2f, 3f, String.format("%.1fx", dspeed), v -> dspeed = v);
+        pill(ctx, cx, y + 146, cw, 22, "Create accessory", true, this::createDraft);
+        return y + 176 - y0;
     }
 
     private void createDraft() {
@@ -772,7 +785,8 @@ public class ClientScreen extends Screen {
             if (MyClient.COSMETICS.catalog.stream().noneMatch(c -> c.id.equals(tryId))) break;
             id = base + "_" + n++;
         }
-        Cosmetic c = new Cosmetic(id, draftType, List.of("custom"), draftAnim);
+        Cosmetic c = new Cosmetic(id, draftType, List.of("custom"), Cosmetic.defaultAnims(draftType));
+        c.animation = draftAnim;
         c.custom = true;
         c.tintRgb = ((int) dr << 16) | ((int) dg << 8) | (int) db;
         c.speed = dspeed;
@@ -794,75 +808,75 @@ public class ClientScreen extends Screen {
         if (texFiltered == null) refilterTextures();
         box(ctx, texBox, cx, y0, cw, 24);
         int ry = y0 + 30;
-        pill(ctx, cx, ry, cw - 110, 22, TextureLab.dirtyCount() > 0 ? "Apply + reload (" + TextureLab.dirtyCount() + ")" : "Apply + reload", true, this::applyTextures);
-        text(ctx, "Pack", cx + cw - 104, ry + 5, MUTED);
-        toggle(ctx, "texpack", cx + cw - 40, ry + 2, TextureLab.isEnabled(), () -> {
+        pill(ctx, cx, ry, cw - 90, 20, TextureLab.dirtyCount() > 0 ? "Apply + reload (" + TextureLab.dirtyCount() + ")" : "Apply + reload", true, this::applyTextures);
+        text(ctx, "Pack", cx + cw - 82, ry + 5, MUTED);
+        toggle(ctx, "texpack", cx + cw - 36, ry + 2, TextureLab.isEnabled(), () -> {
             if (!TextureLab.packExists()) { toast("Edit a texture and press Apply first"); return; }
             TextureLab.setEnabled(!TextureLab.isEnabled());
             toast(TextureLab.isEnabled() ? "Texture pack on" : "Texture pack off");
         });
 
-        int ly = y0 + 60, rows = 5, lh = rows * 20 + 8;
+        int ly = y0 + 58, rows = 5, lh = rows * 19 + 8;
         w.lx = cx; w.ly = ly; w.lw = cw; w.lh = lh;
-        Draw.rr(ctx, cx, ly, cw, lh, 12, CARD);
+        Draw.rr(ctx, cx, ly, cw, lh, 9, CARD);
         w.listScroll = Math.max(0, Math.min(w.listScroll, Math.max(0, texFiltered.size() - rows)));
         for (int r = 0; r < rows; r++) {
             int idx = w.listScroll + r;
             if (idx >= texFiltered.size()) break;
             String nm = texFiltered.get(idx);
-            int rr = ly + 4 + r * 20;
-            boolean sel = nm.equals(selTex), hv = hover(cx + 4, rr, cw - 8, 18);
-            if (sel) Draw.rr(ctx, cx + 4, rr, cw - 8, 18, 9, ACCENT);
-            else if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, 18, 9, 0xFF262D4C);
-            text(ctx, Ui.trim(nm, cw - 40), cx + 12, rr + 4, sel ? 0xFFFFFFFF : TEXT);
-            if (TextureLab.isDirty(nm)) Draw.circle(ctx, cx + cw - 16, rr + 9, 3, ACCENT2);
-            addHit(cx + 4, rr, cw - 8, 18, () -> selTex = nm);
+            int rr = ly + 4 + r * 19;
+            boolean sel = nm.equals(selTex), hv = hover(cx + 4, rr, cw - 8, 17);
+            if (sel) Draw.rr(ctx, cx + 4, rr, cw - 8, 17, 8, ACCENT);
+            else if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, 17, 8, 0xFF262638);
+            text(ctx, Ui.trim(nm, cw - 40), cx + 11, rr + 4, sel ? 0xFF14101E : TEXT);
+            if (TextureLab.isDirty(nm)) Draw.circle(ctx, cx + cw - 14, rr + 8.5f, 3, ACCENT2);
+            addHit(cx + 4, rr, cw - 8, 17, () -> selTex = nm);
         }
-        if (texFiltered.isEmpty()) text(ctx, "No textures found", cx + 12, ly + 12, MUTED);
-        text(ctx, texFiltered.size() + " block textures (scroll the list)", cx + 4, ly + lh + 3, MUTED);
+        if (texFiltered.isEmpty()) text(ctx, "No textures found", cx + 11, ly + 12, MUTED);
+        text(ctx, texFiltered.size() + " block textures (scroll the list)", cx + 3, ly + lh + 3, MUTED);
 
-        int ty = ly + lh + 20;
+        int ty = ly + lh + 19;
         BufferedImage img = selTex == null ? null : TextureLab.get(selTex);
         int bottom = ty + 20;
         if (img != null) {
             int size = TextureLab.size(img);
-            int cell = Math.max(2, 128 / size), gp = cell * size;
-            gx = cx + 3; gy = ty + 16; gcell = cell; gsize = size;
+            int cell = Math.max(2, 112 / size), gp = cell * size;
+            gx = cx + 3; gy = ty + 15; gcell = cell; gsize = size;
             text(ctx, Ui.trim(pretty(selTex) + " (" + size + "x" + size + (img.getHeight() > img.getWidth() ? ", frame 1" : "") + ")", cw), cx + 2, ty, TEXT);
-            Draw.rr(ctx, gx - 3, gy - 3, gp + 6, gp + 6, 8, TILE);
+            Draw.rr(ctx, gx - 3, gy - 3, gp + 6, gp + 6, 7, TILE);
             drawImage(ctx, img, size, gx, gy, cell, true);
 
-            int tx = gx + gp + 14, tw = Math.min(92, cx + cw - tx);
+            int tx = gx + gp + 12, tw = Math.min(88, cx + cw - tx);
             int i = 0;
             for (Tool t : Tool.values()) {
                 final Tool tt = t;
-                pill(ctx, tx, gy + i * 22, tw, 18, t.label, tool == t, () -> tool = tt);
+                pill(ctx, tx, gy + i * 20, tw, 17, t.label, tool == t, () -> tool = tt);
                 i++;
             }
-            pill(ctx, tx, gy + i * 22, tw / 2 - 2, 18, "Undo", false, () -> { if (selTex != null) TextureLab.undo(selTex); });
-            pill(ctx, tx + tw / 2 + 2, gy + i * 22, tw / 2 - 2, 18, "Reset", false, () -> {
+            pill(ctx, tx, gy + i * 20, tw / 2 - 2, 17, "Undo", false, () -> { if (selTex != null) TextureLab.undo(selTex); });
+            pill(ctx, tx + tw / 2 + 2, gy + i * 20, tw / 2 - 2, 17, "Reset", false, () -> {
                 if (selTex != null) { TextureLab.reset(selTex); toast("Reset - press Apply to reload the original"); }
             });
-            float pp = Math.max(1f, 26f / size);
-            Draw.rr(ctx, tx - 3, gy + 138 - 3, pp * size * 2 + 6, pp * size * 2 + 6, 6, TILE);
+            float pp = Math.max(1f, 22f / size);
+            Draw.rr(ctx, tx - 3, gy + 123, pp * size * 2 + 6, pp * size * 2 + 6, 5, TILE);
             for (int a = 0; a < 2; a++) for (int b = 0; b < 2; b++)
-                drawImage(ctx, img, size, tx + a * pp * size, gy + 138 + b * pp * size, pp, false);
+                drawImage(ctx, img, size, tx + a * pp * size, gy + 126 + b * pp * size, pp, false);
 
-            int sy = gy + gp + 12;
-            slider(ctx, "Red", cx, sy, cw - 36, texR, 0, 255, String.valueOf((int) texR), v -> texR = v);
-            slider(ctx, "Green", cx, sy + 20, cw - 36, texG, 0, 255, String.valueOf((int) texG), v -> texG = v);
-            slider(ctx, "Blue", cx, sy + 40, cw - 36, texB, 0, 255, String.valueOf((int) texB), v -> texB = v);
-            Draw.rr(ctx, cx + cw - 28, sy + 4, 26, 30, 8, 0xFF000000 | ((int) texR << 16) | ((int) texG << 8) | (int) texB);
-            bottom = sy + 62;
+            int sy = gy + gp + 11;
+            slider(ctx, "Red", cx, sy, cw - 30, texR, 0, 255, String.valueOf((int) texR), v -> texR = v);
+            slider(ctx, "Green", cx, sy + 19, cw - 30, texG, 0, 255, String.valueOf((int) texG), v -> texG = v);
+            slider(ctx, "Blue", cx, sy + 38, cw - 30, texB, 0, 255, String.valueOf((int) texB), v -> texB = v);
+            Draw.rr(ctx, cx + cw - 24, sy + 3, 22, 28, 7, 0xFF000000 | ((int) texR << 16) | ((int) texG << 8) | (int) texB);
+            bottom = sy + 58;
         } else {
             text(ctx, "Pick a block texture above", cx + 2, ty, MUTED);
         }
         return bottom - y0 + 6;
     }
 
-    private boolean gridPaint(double mouseX, double mouseY) {
+    private boolean gridPaint(double lx, double ly) {
         if (selTex == null || gcell <= 0) return false;
-        int px = (int) Math.floor((mouseX - gx) / gcell), py = (int) Math.floor((mouseY - gy) / gcell);
+        int px = (int) Math.floor((lx - gx) / gcell), py = (int) Math.floor((ly - gy) / gcell);
         if (px < 0 || py < 0 || px >= gsize || py >= gsize) return false;
         BufferedImage img = TextureLab.get(selTex);
         if (img == null) return false;
@@ -891,98 +905,99 @@ public class ClientScreen extends Screen {
 
     private int renderBuilder(DrawContext ctx, Win w, int y0) {
         box(ctx, schemBox, cx, y0, cw, 24);
-        int ly = y0 + 30, rows = 5, lh = rows * 20 + 8;
+        int ly = y0 + 30, rows = 5, lh = rows * 19 + 8;
         w.lx = cx; w.ly = ly; w.lw = cw; w.lh = lh;
-        Draw.rr(ctx, cx, ly, cw, lh, 12, CARD);
+        Draw.rr(ctx, cx, ly, cw, lh, 9, CARD);
         w.listScroll = Math.max(0, Math.min(w.listScroll, Math.max(0, schemFiltered.size() - rows)));
         for (int r = 0; r < rows; r++) {
             int idx = w.listScroll + r;
             if (idx >= schemFiltered.size()) break;
             Path p = schemFiltered.get(idx);
             String nm = p.getFileName().toString().replaceFirst("\\.litematic$", "");
-            int rr = ly + 4 + r * 20;
+            int rr = ly + 4 + r * 19;
             boolean sel = SchematicBuilder.loaded != null && SchematicBuilder.loaded.name.equals(nm);
-            boolean hv = hover(cx + 4, rr, cw - 8, 18);
-            if (sel) Draw.rr(ctx, cx + 4, rr, cw - 8, 18, 9, ACCENT);
-            else if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, 18, 9, 0xFF262D4C);
-            text(ctx, Ui.trim(nm, cw - 28), cx + 12, rr + 4, sel ? 0xFFFFFFFF : TEXT);
-            addHit(cx + 4, rr, cw - 8, 18, () -> loadSchematic(p));
+            boolean hv = hover(cx + 4, rr, cw - 8, 17);
+            if (sel) Draw.rr(ctx, cx + 4, rr, cw - 8, 17, 8, ACCENT);
+            else if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, 17, 8, 0xFF262638);
+            text(ctx, Ui.trim(nm, cw - 28), cx + 11, rr + 4, sel ? 0xFF14101E : TEXT);
+            addHit(cx + 4, rr, cw - 8, 17, () -> loadSchematic(p));
         }
         if (schemFiltered.isEmpty()) {
-            text(ctx, schemFiles.isEmpty() ? "No .litematic files found" : "No match", cx + 12, ly + 10, MUTED);
-            if (schemFiles.isEmpty()) text(ctx, "Put them in .minecraft/schematics", cx + 12, ly + 24, MUTED);
+            text(ctx, schemFiles.isEmpty() ? "No .litematic files found" : "No match", cx + 11, ly + 10, MUTED);
+            if (schemFiles.isEmpty()) text(ctx, "Put them in .minecraft/schematics", cx + 11, ly + 23, MUTED);
         }
 
-        int iy = ly + lh + 8, ih = 150;
-        Draw.rr(ctx, cx, iy, cw, ih, 12, CARD);
+        int iy = ly + lh + 7, ih = 142;
+        Draw.rr(ctx, cx, iy, cw, ih, 9, CARD);
         int yy = iy + 8;
         if (SchematicBuilder.loaded == null) {
-            text(ctx, "Select a schematic above.", cx + 10, yy, MUTED);
+            text(ctx, "Select a schematic above.", cx + 9, yy, MUTED);
         } else {
-            text(ctx, Ui.trim(SchematicBuilder.loaded.name, cw - 20), cx + 10, yy, TEXT);
+            text(ctx, Ui.trim(SchematicBuilder.loaded.name, cw - 18), cx + 9, yy, TEXT);
             text(ctx, SchematicBuilder.loaded.sizeX + "x" + SchematicBuilder.loaded.sizeY + "x" + SchematicBuilder.loaded.sizeZ
-                + " - " + SchematicBuilder.loaded.count() + " blocks", cx + 10, yy + 12, MUTED);
+                + " - " + SchematicBuilder.loaded.count() + " blocks", cx + 9, yy + 12, MUTED);
             float prog = SchematicBuilder.total() == 0 ? 0f : SchematicBuilder.placed() / (float) SchematicBuilder.total();
-            Draw.rr(ctx, cx + 10, yy + 28, cw - 20, 8, 4, OFF);
-            Draw.rr(ctx, cx + 10, yy + 28, Math.max(8, (cw - 20) * prog), 8, 4, ACCENT2);
+            Draw.rr(ctx, cx + 9, yy + 27, cw - 18, 6, 3, OFF);
+            Draw.rr(ctx, cx + 9, yy + 27, Math.max(6, (cw - 18) * prog), 6, 3, ACCENT2);
             String o = SchematicBuilder.origin == null ? "Origin: not set"
                 : "Origin: " + SchematicBuilder.origin.getX() + " " + SchematicBuilder.origin.getY() + " " + SchematicBuilder.origin.getZ();
-            text(ctx, o, cx + 10, yy + 42, TEXT);
-            pill(ctx, cx + 10, yy + 56, cw - 20, 18, "Set origin here (my feet)", false, () -> {
+            text(ctx, o, cx + 9, yy + 39, TEXT);
+            pill(ctx, cx + 9, yy + 53, cw - 18, 17, "Set origin here (my feet)", false, () -> {
                 SchematicBuilder.setOriginHere();
                 toast("Origin set to your position");
             });
-            text(ctx, "Build", cx + 10, yy + 82, TEXT);
-            toggle(ctx, "build", cx + cw - 46, yy + 79, SchematicBuilder.running, () -> SchematicBuilder.setRunning(!SchematicBuilder.running));
-            text(ctx, "Walk to blocks", cx + 10, yy + 102, TEXT);
-            toggle(ctx, "walk", cx + cw - 46, yy + 99, SchematicBuilder.walk, () -> SchematicBuilder.walk = !SchematicBuilder.walk);
-            pill(ctx, cx + 10, yy + 122, cw - 20, 18, "Restart", false, SchematicBuilder::restart);
+            text(ctx, "Build", cx + 9, yy + 79, TEXT);
+            toggle(ctx, "build", cx + cw - 42, yy + 76, SchematicBuilder.running, () -> SchematicBuilder.setRunning(!SchematicBuilder.running));
+            text(ctx, "Walk to blocks", cx + 9, yy + 98, TEXT);
+            toggle(ctx, "walk", cx + cw - 42, yy + 95, SchematicBuilder.walk, () -> SchematicBuilder.walk = !SchematicBuilder.walk);
+            pill(ctx, cx + 9, yy + 115, cw - 18, 17, "Restart", false, SchematicBuilder::restart);
         }
-        int sy = iy + ih + 8, lines = 0;
+        int sy = iy + ih + 7, lines = 0;
         for (String line : wrap(SchematicBuilder.status, cw - 4)) {
-            text(ctx, line, cx + 2, sy + lines * 12, SchematicBuilder.missing.isEmpty() ? ACCENT2 : 0xFFFFB454);
+            text(ctx, line, cx + 2, sy + lines * 11, SchematicBuilder.missing.isEmpty() ? ACCENT2 : 0xFFFFB454);
             lines++;
         }
         for (String line : wrap("Builds bottom to top, in reach only, from your hotbar. Many servers forbid this.", cw - 4)) {
-            text(ctx, line, cx + 2, sy + lines * 12 + 4, MUTED);
+            text(ctx, line, cx + 2, sy + lines * 11 + 4, MUTED);
             lines++;
         }
-        return sy + lines * 12 + 10 - y0;
+        return sy + lines * 11 + 10 - y0;
     }
 
     // ======================================================================== TRACERS
     private int renderTracers(DrawContext ctx, Win w, int y0) {
         dev.myclient.module.Tracers tr = MyClient.MODULES.tracers;
-        text(ctx, "Tracers", cx + 2, y0 + 4, TEXT);
-        toggle(ctx, "tracers", cx + cw - 40, y0 + 1, tr.isEnabled(), tr::toggle);
-        slider(ctx, "Range", cx, y0 + 30, cw, tr.radius, 8, 48, tr.radius + "m", v -> { tr.radius = Math.round(v); tr.changed(); });
+        Module xr = MyClient.MODULES.xray;
+        settingRow(ctx, y0, "Tracers", "Lines to your blocks", tr.isEnabled(), tr::toggle);
+        settingRow(ctx, y0 + 34, "X-Ray boxes", "Boxes through walls", xr.isEnabled(), xr::toggle);
+        slider(ctx, "Range", cx, y0 + 72, cw, tr.radius, 16, 512, tr.radius + "m", v -> { tr.radius = Math.round(v / 8f) * 8; tr.changed(); });
 
-        int y = y0 + 56;
-        text(ctx, "Selected blocks (" + tr.blocks.size() + ") - click to remove", cx + 2, y, MUTED);
-        y += 14;
+        int y = y0 + 96;
+        text(ctx, "Selected (" + tr.blocks.size() + ") - click to remove", cx + 2, y, MUTED);
+        y += 13;
         if (tr.blocks.isEmpty()) {
             text(ctx, "None yet - pick blocks below", cx + 2, y + 2, MUTED);
-            y += 20;
+            y += 18;
         } else {
             int x = cx;
             for (String id : new ArrayList<>(tr.blocks)) {
                 String label = pretty(id);
-                int cwid = Ui.width(label) + 24;
-                if (x + cwid > cx + cw) { x = cx; y += 22; }
-                boolean hv = hover(x, y, cwid, 18);
-                Draw.rr(ctx, x, y, cwid, 18, 9, hv ? 0xFF4A2A3C : 0xFF2A2F55);
-                Draw.circle(ctx, x + 9, y + 9, 3.5f, 0xFF000000 | Palette.rainbow((id.hashCode() & 0x7fffffff) % 360 / 360f, 0.65f, 1f));
-                text(ctx, label, x + 17, y + 4, TEXT);
-                addHit(x, y, cwid, 18, () -> tr.toggleBlock(id));
+                int cwid = Ui.width(label) + 22;
+                if (x + cwid > cx + cw) { x = cx; y += 20; }
+                boolean hv = hover(x, y, cwid, 16);
+                Draw.rr(ctx, x, y, cwid, 16, 8, hv ? 0xFF4A2A3C : 0xFF26263E);
+                Draw.circle(ctx, x + 8, y + 8, 3, 0xFF000000 | Palette.rainbow((id.hashCode() & 0x7fffffff) % 360 / 360f, 0.65f, 1f));
+                text(ctx, label, x + 15, y + 3, TEXT);
+                addHit(x, y, cwid, 16, () -> tr.toggleBlock(id));
                 x += cwid + 4;
             }
-            y += 26;
+            y += 24;
         }
 
-        box(ctx, tracerBox, cx, y, cw, 24);
-        int ly = y + 30, rows = 6, rh = 24, lh = rows * rh + 8;
+        box(ctx, tracerBox, cx, y, cw, 22);
+        int ly = y + 28, rows = 6, rh = 22, lh = rows * rh + 8;
         w.lx = cx; w.ly = ly; w.lw = cw; w.lh = lh;
-        Draw.rr(ctx, cx, ly, cw, lh, 12, CARD);
+        Draw.rr(ctx, cx, ly, cw, lh, 9, CARD);
         if (blockFiltered == null) refilterBlocks();
         w.listScroll = Math.max(0, Math.min(w.listScroll, Math.max(0, blockFiltered.size() - rows)));
         for (int r = 0; r < rows; r++) {
@@ -991,13 +1006,30 @@ public class ClientScreen extends Screen {
             String id = blockFiltered.get(idx);
             int rr = ly + 4 + r * rh;
             boolean on = tr.blocks.contains(id), hv = hover(cx + 4, rr, cw - 8, rh - 2);
-            if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, rh - 2, 10, 0xFF262D4C);
-            text(ctx, Ui.trim(pretty(id), cw - 70), cx + 12, rr + 6, TEXT);
+            if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, rh - 2, 8, 0xFF262638);
+            text(ctx, Ui.trim(pretty(id), cw - 62), cx + 11, rr + 5, TEXT);
             addHit(cx + 4, rr, cw - 8, rh - 2, () -> tr.toggleBlock(id));
-            toggle(ctx, "tb:" + id, cx + cw - 50, rr + 2, on, () -> tr.toggleBlock(id));
+            toggle(ctx, "tb:" + id, cx + cw - 42, rr + 2, on, () -> tr.toggleBlock(id));
         }
-        text(ctx, blockFiltered.size() + " blocks (scroll the list)", cx + 4, ly + lh + 3, MUTED);
-        return ly + lh + 20 - y0;
+        text(ctx, blockFiltered.size() + " blocks (scroll the list)", cx + 3, ly + lh + 3, MUTED);
+        return ly + lh + 18 - y0;
+    }
+
+    // ======================================================================== EFFECTS
+    private int renderEffects(DrawContext ctx, Win w, int y0) {
+        int y = y0;
+        settingRow(ctx, y, "Jump effect", "Ring + sparks on jump", Settings.jumpFx, () -> Settings.jumpFx = !Settings.jumpFx); y += 34;
+        settingRow(ctx, y, "Hit effect", "Burst when you hit", Settings.hitFx, () -> Settings.hitFx = !Settings.hitFx); y += 34;
+        settingRow(ctx, y, "Damage flash", "Red flash when hurt", Settings.hurtFlash, () -> Settings.hurtFlash = !Settings.hurtFlash); y += 34;
+        settingRow(ctx, y, "Low fire", "Fire overlay sits lower", Settings.lowFire, () -> Settings.lowFire = !Settings.lowFire); y += 34;
+        settingRow(ctx, y, "Low shield", "Shield sits lower", Settings.lowShield, () -> Settings.lowShield = !Settings.lowShield); y += 34;
+        settingRow(ctx, y, "Small totem pop", "Hides the big totem", Settings.smallTotem, () -> Settings.smallTotem = !Settings.smallTotem); y += 34;
+        settingRow(ctx, y, "No vanilla particles", "Removes all of them", Settings.noParticles, () -> Settings.noParticles = !Settings.noParticles); y += 40;
+        float shown = pendingScale > 0 ? pendingScale : Settings.guiScale;
+        slider(ctx, "Menu size", cx, y, cw, shown, 0.5f, 1.3f, String.format("%.2f", shown), v -> pendingScale = Math.round(v * 20f) / 20f);
+        y += 22;
+        text(ctx, "Applies when you let go", cx + 2, y, MUTED);
+        return y + 16 - y0;
     }
 
     // ======================================================================== SEARCH
@@ -1058,19 +1090,19 @@ public class ClientScreen extends Screen {
     }
 
     private int renderSearch(DrawContext ctx, Win w, int y0) {
-        box(ctx, searchBox, cx, y0, cw, 26);
+        box(ctx, searchBox, cx, y0, cw, 24);
         List<Result> res = results(searchBox.text);
-        int ly = y0 + 34, rows = 9, rh = 24, lh = rows * rh + 8;
+        int ly = y0 + 30, rows = 9, rh = 22, lh = rows * rh + 8;
         w.lx = cx; w.ly = ly; w.lw = cw; w.lh = lh;
-        Draw.rr(ctx, cx, ly, cw, lh, 12, CARD);
+        Draw.rr(ctx, cx, ly, cw, lh, 9, CARD);
         if (searchBox.text.isBlank()) {
-            int yy = ly + 12;
-            for (String line : wrap("Type to find modules, cosmetics, skies, macros, schematics, block tracers, block textures and windows.", cw - 24)) {
-                text(ctx, line, cx + 12, yy, MUTED);
-                yy += 12;
+            int yy = ly + 10;
+            for (String line : wrap("Type to find modules, cosmetics, skies, macros, schematics, block tracers, block textures and windows.", cw - 22)) {
+                text(ctx, line, cx + 11, yy, MUTED);
+                yy += 11;
             }
         } else if (res.isEmpty()) {
-            text(ctx, "Nothing found", cx + 12, ly + 12, MUTED);
+            text(ctx, "Nothing found", cx + 11, ly + 11, MUTED);
         }
         w.listScroll = Math.max(0, Math.min(w.listScroll, Math.max(0, res.size() - rows)));
         for (int r = 0; r < rows; r++) {
@@ -1079,16 +1111,16 @@ public class ClientScreen extends Screen {
             Result rs = res.get(idx);
             int rr = ly + 4 + r * rh;
             boolean hv = hover(cx + 4, rr, cw - 8, rh - 2);
-            if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, rh - 2, 10, 0xFF262D4C);
+            if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, rh - 2, 8, 0xFF262638);
             int cwid = Ui.width(rs.cat()) + 12;
-            Draw.rr(ctx, cx + 10, rr + 4, cwid, 15, 7.5f, 0xFF2A2F55);
-            text(ctx, rs.cat(), cx + 16, rr + 7, ACCENT2);
-            text(ctx, Ui.trim(rs.label(), cw - cwid - 56), cx + 18 + cwid, rr + 7, TEXT);
-            Draw.circle(ctx, cx + cw - 18, rr + 11, 5, rs.on() ? ACCENT : OFF);
+            Draw.rr(ctx, cx + 9, rr + 3, cwid, 14, 7, 0xFF26263E);
+            text(ctx, rs.cat(), cx + 15, rr + 6, ACCENT2);
+            text(ctx, Ui.trim(rs.label(), cw - cwid - 50), cx + 16 + cwid, rr + 6, TEXT);
+            Draw.circle(ctx, cx + cw - 15, rr + 10, 4.5f, rs.on() ? ACCENT : OFF);
             addHit(cx + 4, rr, cw - 8, rh - 2, rs.run());
         }
-        if (res.size() > 0) text(ctx, res.size() + " results", cx + 4, ly + lh + 3, MUTED);
-        return ly + lh + 20 - y0;
+        if (res.size() > 0) text(ctx, res.size() + " results", cx + 3, ly + lh + 3, MUTED);
+        return ly + lh + 18 - y0;
     }
 
     // ======================================================================== drag & drop
@@ -1121,11 +1153,12 @@ public class ClientScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button != 0) return true;
-        Win w = windowAt(mouseX, mouseY);
+        double lx = mouseX / K(), ly = mouseY / K();
+        Win w = windowAt(lx, ly);
         if (w == null) {
             for (int i = hits.size() - 1; i >= 0; i--) {
                 Hit h = hits.get(i);
-                if (h.win() == null && h.in(mouseX, mouseY)) { focus = null; h.run().run(); return true; }
+                if (h.win() == null && h.in(lx, ly)) { focus = null; h.run().run(); return true; }
             }
             focus = null;
             return true;
@@ -1134,7 +1167,7 @@ public class ClientScreen extends Screen {
         WINS.add(w);
 
         for (BoxRect b : boxes) {
-            if (b.win() == w && mouseX >= b.x() && mouseX < b.x() + b.w() && mouseY >= b.y() && mouseY < b.y() + b.h()) {
+            if (b.win() == w && lx >= b.x() && lx < b.x() + b.w() && ly >= b.y() && ly < b.y() + b.h()) {
                 focus = b.box();
                 b.box().cursor = b.box().text.length();
                 return true;
@@ -1142,31 +1175,31 @@ public class ClientScreen extends Screen {
         }
         for (int i = hits.size() - 1; i >= 0; i--) {
             Hit h = hits.get(i);
-            if (h.win() == w && h.in(mouseX, mouseY)) {
+            if (h.win() == w && h.in(lx, ly)) {
                 focus = null;
                 h.run().run();
                 return true;
             }
         }
         for (Slider s : sliders) {
-            if (s.win() == w && mouseX >= s.x() - 6 && mouseX <= s.x() + s.w() + 6 && mouseY >= s.y() && mouseY < s.y() + 14) {
+            if (s.win() == w && lx >= s.x() - 6 && lx <= s.x() + s.w() + 6 && ly >= s.y() && ly < s.y() + 13) {
                 dragging = s;
-                updateSlider(s, mouseX);
+                updateSlider(s, lx);
                 return true;
             }
         }
         if (w.tab == Tab.TEXTURES && gcell > 0 && selTex != null && !w.collapsed
-            && mouseX >= gx && mouseX < gx + gcell * gsize && mouseY >= gy && mouseY < gy + gcell * gsize
-            && mouseY >= cy && mouseY < cy + ch) {
+            && lx >= gx && lx < gx + gcell * gsize && ly >= gy && ly < gy + gcell * gsize
+            && ly >= cy && ly < cy + ch) {
             if (tool != Tool.PICK) TextureLab.beginStroke(selTex);
             painting = true;
-            gridPaint(mouseX, mouseY);
+            gridPaint(lx, ly);
             return true;
         }
-        if (mouseY < w.y + TITLE) {
+        if (ly < w.y + TITLE) {
             dragWin = w;
-            dragOffX = (float) (mouseX - w.x);
-            dragOffY = (float) (mouseY - w.y);
+            dragOffX = (float) (lx - w.x);
+            dragOffY = (float) (ly - w.y);
             return true;
         }
         focus = null;
@@ -1175,11 +1208,12 @@ public class ClientScreen extends Screen {
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dx, double dy) {
-        if (dragging != null) { updateSlider(dragging, mouseX); return true; }
-        if (painting && (tool == Tool.PENCIL || tool == Tool.ERASER)) { gridPaint(mouseX, mouseY); return true; }
+        double lx = mouseX / K(), ly = mouseY / K();
+        if (dragging != null) { updateSlider(dragging, lx); return true; }
+        if (painting && (tool == Tool.PENCIL || tool == Tool.ERASER)) { gridPaint(lx, ly); return true; }
         if (dragWin != null) {
-            dragWin.x = Math.max(0, Math.min((float) (mouseX - dragOffX), Math.max(0, width - dragWin.w)));
-            dragWin.y = Math.max(0, Math.min((float) (mouseY - dragOffY), Math.max(0, height - TITLE)));
+            dragWin.x = Math.max(0, Math.min((float) (lx - dragOffX), Math.max(0, width / K() - dragWin.w)));
+            dragWin.y = Math.max(0, Math.min((float) (ly - dragOffY), Math.max(0, height / K() - TITLE)));
             return true;
         }
         return true;
@@ -1190,14 +1224,20 @@ public class ClientScreen extends Screen {
         dragging = null;
         painting = false;
         dragWin = null;
+        if (pendingScale > 0) {
+            Settings.guiScale = pendingScale;
+            pendingScale = -1f;
+            init();
+        }
         return true;
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
-        Win w = windowAt(mouseX, mouseY);
+        double lx = mouseX / K(), ly = mouseY / K();
+        Win w = windowAt(lx, ly);
         if (w == null || w.collapsed) return true;
-        boolean overList = w.lw > 0 && mouseX >= w.lx && mouseX < w.lx + w.lw && mouseY >= w.ly && mouseY < w.ly + w.lh
+        boolean overList = w.lw > 0 && lx >= w.lx && lx < w.lx + w.lw && ly >= w.ly && ly < w.ly + w.lh
             && (w.tab == Tab.TEXTURES || w.tab == Tab.BUILDER || w.tab == Tab.TRACERS || w.tab == Tab.SEARCH);
         if (overList) w.listScroll = Math.max(0, w.listScroll - (int) Math.signum(vertical) * 2);
         else w.scroll -= (float) vertical * 24f;

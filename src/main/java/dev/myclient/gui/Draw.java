@@ -12,9 +12,16 @@ public final class Draw {
     private Draw() {}
 
     public static float ss = 2f;
+    /** GUI scale factor (the menu is drawn at this fraction of normal size). */
+    public static float k = 1f;
 
-    public static void begin(DrawContext c, float s) {
+    private static float u(float v) { return v * ss * k; }
+
+    public static void begin(DrawContext c, float s) { begin(c, s, 1f); }
+
+    public static void begin(DrawContext c, float s, float scale) {
         ss = s;
+        k = scale;
         c.getMatrices().push();
         c.getMatrices().scale(1f / s, 1f / s, 1f);
     }
@@ -46,7 +53,7 @@ public final class Draw {
     }
 
     public static void rect(DrawContext c, float x, float y, float w, float h, int color) {
-        c.fill(Math.round(x * ss), Math.round(y * ss), Math.round((x + w) * ss), Math.round((y + h) * ss), color);
+        c.fill(Math.round(u(x)), Math.round(u(y)), Math.round(u(x + w)), Math.round(u(y + h)), color);
     }
 
     public static void rr(DrawContext c, float x, float y, float w, float h, float r, int color) {
@@ -55,9 +62,9 @@ public final class Draw {
 
     /** Anti-aliased rounded rectangle with a vertical gradient. */
     public static void rrGrad(DrawContext c, float x, float y, float w, float h, float r, int top, int bot) {
-        int X = Math.round(x * ss), Y = Math.round(y * ss), W = Math.round(w * ss), H = Math.round(h * ss);
+        int X = Math.round(u(x)), Y = Math.round(u(y)), W = Math.round(u(w)), H = Math.round(u(h));
         if (W <= 0 || H <= 0) return;
-        float R = Math.max(0f, Math.min(r * ss, Math.min(W, H) / 2f));
+        float R = Math.max(0f, Math.min(u(r), Math.min(W, H) / 2f));
         for (int i = 0; i < H; i++) {
             int k = Math.min(i, H - 1 - i);
             float inset = 0f;
@@ -84,12 +91,12 @@ public final class Draw {
 
     /** Straight line between two GUI points. */
     public static void line(DrawContext c, float x1, float y1, float x2, float y2, float thick, int color) {
-        float dx = (x2 - x1) * ss, dy = (y2 - y1) * ss;
+        float dx = u(x2 - x1), dy = u(y2 - y1);
         float len = (float) Math.sqrt(dx * dx + dy * dy);
         if (len < 0.5f) return;
-        int h = Math.max(1, Math.round(thick * ss / 2f));
+        int h = Math.max(1, Math.round(u(thick) / 2f));
         c.getMatrices().push();
-        c.getMatrices().translate(x1 * ss, y1 * ss, 0);
+        c.getMatrices().translate(u(x1), u(y1), 0);
         c.getMatrices().multiply(RotationAxis.POSITIVE_Z.rotation((float) Math.atan2(dy, dx)));
         c.fill(0, -h, Math.round(len), h, color);
         c.getMatrices().pop();

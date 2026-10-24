@@ -34,3 +34,12 @@ Still to build (version-specific, needs a dev environment to test):
 - Tracers: pick any blocks, lines are drawn to them on the HUD (range 8-48).
 - Trail is now a smooth glowing ribbon instead of particles (third person).
 - Everything is saved to config/myclient/settings.json (equipped items, variants, custom items, modules, macros, sky, tracers, windows).
+
+## v0.5 (Lumen)
+- New compact flat GUI (default 75% size, adjustable in Effects), movable windows, dock at the top.
+- Skies are rendered in the world: Lumen, Starry Night, Galaxy, Aurora, Nebula, Sunset, Blood Moon + your own PNGs.
+  Moons, stars, twinkles, falling stars, aurora curtains and the Lumen logo.
+- Own particle system (smooth glowing shapes, no Minecraft textures): halos, auras, trails, jump/hit/damage effects.
+- Unique animations per cosmetic, live editor preview on your character.
+- Tracers/X-Ray up to 512 blocks, Freecam, Auto Totem, Air Place, Reach.
+- Effects window: low fire, low shield, small totem pop, remove vanilla particles, jump/hit/damage effects.

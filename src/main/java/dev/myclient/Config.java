@@ -31,6 +31,9 @@ public final class Config {
         public List<String> tracerBlocks = new ArrayList<>();
         public int tracerRadius = 32;
         public List<WinData> windows = new ArrayList<>();
+        public Map<String, Float> moduleValues = new HashMap<>();
+        public Map<String, Boolean> flags = new HashMap<>();
+        public float guiScale = 0.75f;
     }
 
     public static Data data = new Data();
@@ -56,7 +59,18 @@ public final class Config {
                     d.custom.add(cc);
                 }
             }
-            for (Module m : MyClient.MODULES.all) d.modules.put(m.name, m.isEnabled());
+            for (Module m : MyClient.MODULES.all) {
+                d.modules.put(m.name, m.isEnabled());
+                if (m.settingLabel != null) d.moduleValues.put(m.name, m.settingValue);
+            }
+            d.flags.put("lowFire", Settings.lowFire);
+            d.flags.put("lowShield", Settings.lowShield);
+            d.flags.put("smallTotem", Settings.smallTotem);
+            d.flags.put("noParticles", Settings.noParticles);
+            d.flags.put("jumpFx", Settings.jumpFx);
+            d.flags.put("hitFx", Settings.hitFx);
+            d.flags.put("hurtFlash", Settings.hurtFlash);
+            d.guiScale = Settings.guiScale;
             for (Macro m : MyClient.MACROS.macros) {
                 MacroData md = new MacroData();
                 md.name = m.name; md.cmd = m.command; md.key = m.keyCode; md.enabled = m.enabled;
@@ -84,8 +98,9 @@ public final class Config {
                 for (CustomCos cc : d.custom) {
                     try {
                         if (cm.catalog.stream().anyMatch(c -> c.id.equals(cc.id))) continue;
-                        Cosmetic c = new Cosmetic(cc.id, Cosmetic.Type.valueOf(cc.type),
-                            List.of(cc.variant == null ? "custom" : cc.variant), Cosmetic.Animation.valueOf(cc.anim));
+                        Cosmetic.Type ct = Cosmetic.Type.valueOf(cc.type);
+                        Cosmetic c = new Cosmetic(cc.id, ct, List.of(cc.variant == null ? "custom" : cc.variant), Cosmetic.defaultAnims(ct));
+                        try { c.animation = Cosmetic.Animation.valueOf(cc.anim); } catch (Exception ignored) {}
                         c.custom = true;
                         c.tintRgb = cc.tint;
                         c.speed = cc.speed;
@@ -105,6 +120,22 @@ public final class Config {
             if (d.equipped != null) {
                 for (String id : d.equipped) if (cm.catalog.stream().anyMatch(c -> c.id.equals(id))) cm.equipped.add(id);
             }
+            if (d.moduleValues != null) {
+                for (Module m : MyClient.MODULES.all) {
+                    Float v = d.moduleValues.get(m.name);
+                    if (v != null && m.settingLabel != null) m.settingValue = Math.max(m.settingMin, Math.min(m.settingMax, v));
+                }
+            }
+            if (d.flags != null) {
+                Settings.lowFire = d.flags.getOrDefault("lowFire", false);
+                Settings.lowShield = d.flags.getOrDefault("lowShield", false);
+                Settings.smallTotem = d.flags.getOrDefault("smallTotem", false);
+                Settings.noParticles = d.flags.getOrDefault("noParticles", false);
+                Settings.jumpFx = d.flags.getOrDefault("jumpFx", true);
+                Settings.hitFx = d.flags.getOrDefault("hitFx", true);
+                Settings.hurtFlash = d.flags.getOrDefault("hurtFlash", true);
+            }
+            if (d.guiScale >= 0.5f && d.guiScale <= 1.5f) Settings.guiScale = d.guiScale;
             if (d.modules != null) {
                 for (Module m : MyClient.MODULES.all) {
                     Boolean on = d.modules.get(m.name);
@@ -124,7 +155,7 @@ public final class Config {
                 MyClient.MODULES.tracers.blocks.addAll(d.tracerBlocks);
                 MyClient.MODULES.tracers.changed();
             }
-            if (d.tracerRadius >= 8) MyClient.MODULES.tracers.radius = d.tracerRadius;
+            if (d.tracerRadius >= 16) MyClient.MODULES.tracers.radius = Math.min(512, d.tracerRadius);
         } catch (Exception ignored) {}
     }
 }

@@ -2,9 +2,21 @@
   "schemaVersion": 1,
   "id": "myclient",
   "version": "0.1.0",
-  "name": "MyClient",
-  "description": "Cosmetics, mods and macros in one menu.",
+  "name": "Lumen Client",
+  "description": "Cosmetics, effects, skies and tools in one compact menu.",
   "environment": "client",
-  "entrypoints": { "client": ["dev.myclient.MyClient"] },
-  "depends": { "fabricloader": ">=0.16.0", "minecraft": ">=1.21 <1.22", "java": ">=21", "fabric-api": "*" }
+  "entrypoints": {
+    "client": [
+      "dev.myclient.MyClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": ">=1.21 <1.22",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "mixins": [
+    "myclient.mixins.json"
+  ]
 }

@@ -26,8 +26,8 @@ public final class Ui {
     /** Draws text at GUI coordinates while the supersampled matrix from Draw.begin() is active. */
     public static void text(DrawContext ctx, String s, float x, float y, int color) {
         ctx.getMatrices().push();
-        ctx.getMatrices().translate(x * Draw.ss, y * Draw.ss, 0);
-        ctx.getMatrices().scale(Draw.ss, Draw.ss, 1f);
+        ctx.getMatrices().translate(x * Draw.ss * Draw.k, y * Draw.ss * Draw.k, 0);
+        ctx.getMatrices().scale(Draw.ss * Draw.k, Draw.ss * Draw.k, 1f);
         ctx.drawText(MinecraftClient.getInstance().textRenderer, t(s), 0, 0, color, false);
         ctx.getMatrices().pop();
     }

@@ -2,6 +2,8 @@ package dev.myclient;
 
 import dev.myclient.builder.SchematicBuilder;
 import dev.myclient.cosmetic.CosmeticFeature;
+import dev.myclient.cosmetic.Impulse;
+import dev.myclient.fx.WorldFx;
 import dev.myclient.cosmetic.CosmeticManager;
 import dev.myclient.cosmetic.Particles;
 import dev.myclient.gui.ClientScreen;
@@ -13,6 +15,8 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
+import net.minecraft.util.ActionResult;
 import net.fabricmc.fabric.api.client.rendering.v1.LivingEntityFeatureRendererRegistrationCallback;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.render.entity.PlayerEntityRenderer;
@@ -37,6 +41,17 @@ public class MyClient implements ClientModInitializer {
         });
 
         HudRenderCallback.EVENT.register((ctx, tickCounter) -> TracerRenderer.render(ctx));
+        WorldFx.register();
+
+        AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
+            if (world.isClient() && Settings.hitFx) {
+                WorldFx.burst(entity.getX(), entity.getY() + entity.getHeight() * 0.6, entity.getZ(), 0xBFE9FF, 12, 2.4f);
+                Impulse.kick(0.7f);
+            }
+            return ActionResult.PASS;
+        });
+
+        ClientTickEvents.START_CLIENT_TICK.register(mc -> MODULES.freecam.suppress(mc));
 
         ClientLifecycleEvents.CLIENT_STARTED.register(mc -> {
             COSMETICS.loadUploads();

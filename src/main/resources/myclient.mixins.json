@@ -1,0 +1,14 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "dev.myclient.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "FireOverlayMixin",
+    "ShieldMixin",
+    "TotemMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}
