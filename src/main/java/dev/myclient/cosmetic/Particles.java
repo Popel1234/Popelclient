@@ -4,6 +4,7 @@ import dev.myclient.MyClient;
 import dev.myclient.Settings;
 import dev.myclient.cosmetic.Cosmetic.Animation;
 import dev.myclient.fx.WorldFx;
+import dev.myclient.mixin.ParticleManagerAccessor;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.util.math.random.Random;
@@ -13,6 +14,7 @@ public final class Particles {
     private Particles() {}
 
     private static int tick, lastHurt;
+    private static boolean clearBroken;
     private static boolean wasGround = true;
 
     private static int cosColor(Cosmetic c, float off) {
@@ -27,7 +29,13 @@ public final class Particles {
 
     public static void tick(MinecraftClient mc) {
         if (mc.player == null || mc.world == null) return;
-        if (Settings.noParticles) mc.particleManager.clearParticles();
+        if (Settings.noParticles && !clearBroken) {
+            try {
+                ((ParticleManagerAccessor) (Object) mc.particleManager).myclient$clearParticles();
+            } catch (Throwable t) {
+                clearBroken = true;
+            }
+        }
         if (mc.isPaused()) return;
         tick++;
         ClientPlayerEntity p = mc.player;

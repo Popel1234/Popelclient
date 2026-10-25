@@ -6,7 +6,8 @@
   "client": [
     "FireOverlayMixin",
     "ShieldMixin",
-    "TotemMixin"
+    "TotemMixin",
+    "ParticleManagerAccessor"
   ],
   "injectors": {
     "defaultRequire": 0
