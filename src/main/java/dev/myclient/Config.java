@@ -34,6 +34,11 @@ public final class Config {
         public Map<String, Float> moduleValues = new HashMap<>();
         public Map<String, Boolean> flags = new HashMap<>();
         public float guiScale = 0.75f;
+        public List<String> xrayBlocks = new ArrayList<>();
+        public String fakeTitle;
+        public List<String> fakeLines;
+        public String payFormat;
+        public double fakeMoney = -1;
     }
 
     public static Data data = new Data();
@@ -70,6 +75,17 @@ public final class Config {
             d.flags.put("jumpFx", Settings.jumpFx);
             d.flags.put("hitFx", Settings.hitFx);
             d.flags.put("hurtFlash", Settings.hurtFlash);
+            d.flags.put("fakeBlocks", Settings.fakeBlocks);
+            d.flags.put("butterfly", Settings.butterfly);
+            d.flags.put("fakeScoreboard", Settings.fakeScoreboard);
+            d.flags.put("hideRealScoreboard", Settings.hideRealScoreboard);
+            d.flags.put("fakePay", Settings.fakePay);
+            d.flags.put("payDeduct", Settings.payDeduct);
+            d.xrayBlocks = new ArrayList<>(MyClient.MODULES.xray.blocks);
+            d.fakeTitle = Settings.fakeTitle;
+            d.fakeLines = new ArrayList<>(Settings.fakeLines);
+            d.payFormat = Settings.payFormat;
+            d.fakeMoney = Settings.fakeMoney;
             d.guiScale = Settings.guiScale;
             for (Macro m : MyClient.MACROS.macros) {
                 MacroData md = new MacroData();
@@ -134,8 +150,22 @@ public final class Config {
                 Settings.jumpFx = d.flags.getOrDefault("jumpFx", true);
                 Settings.hitFx = d.flags.getOrDefault("hitFx", true);
                 Settings.hurtFlash = d.flags.getOrDefault("hurtFlash", true);
+                Settings.fakeBlocks = d.flags.getOrDefault("fakeBlocks", false);
+                Settings.butterfly = d.flags.getOrDefault("butterfly", false);
+                Settings.fakeScoreboard = d.flags.getOrDefault("fakeScoreboard", false);
+                Settings.hideRealScoreboard = d.flags.getOrDefault("hideRealScoreboard", false);
+                Settings.fakePay = d.flags.getOrDefault("fakePay", false);
+                Settings.payDeduct = d.flags.getOrDefault("payDeduct", true);
             }
             if (d.guiScale >= 0.5f && d.guiScale <= 1.5f) Settings.guiScale = d.guiScale;
+            if (d.xrayBlocks != null && !d.xrayBlocks.isEmpty()) {
+                MyClient.MODULES.xray.blocks.clear();
+                MyClient.MODULES.xray.blocks.addAll(d.xrayBlocks);
+            }
+            if (d.fakeTitle != null) Settings.fakeTitle = d.fakeTitle;
+            if (d.fakeLines != null) Settings.fakeLines = new ArrayList<>(d.fakeLines);
+            if (d.payFormat != null) Settings.payFormat = d.payFormat;
+            if (d.fakeMoney >= 0) Settings.fakeMoney = d.fakeMoney;
             if (d.modules != null) {
                 for (Module m : MyClient.MODULES.all) {
                     Boolean on = d.modules.get(m.name);

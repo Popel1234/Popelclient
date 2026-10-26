@@ -102,6 +102,7 @@ public final class WorldFx {
     private static void render(WorldRenderContext ctx) {
         try { SkyBox.render(ctx); } catch (Throwable ignored) {}
         try { drawFx(ctx); } catch (Throwable ignored) {}
+        try { dev.myclient.module.SusChunkFinder.renderWorld(ctx); } catch (Throwable ignored) {}
     }
 
     // ------------------------------------------------------------------ drawing

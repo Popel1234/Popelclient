@@ -43,3 +43,12 @@ Still to build (version-specific, needs a dev environment to test):
 - Unique animations per cosmetic, live editor preview on your character.
 - Tracers/X-Ray up to 512 blocks, Freecam, Auto Totem, Air Place, Reach.
 - Effects window: low fire, low shield, small totem pop, remove vanilla particles, jump/hit/damage effects.
+
+## v0.6
+- Menu size fix: windows always fit the screen and scroll; +/- buttons in the dock and the - / + keys change the size.
+- X-Ray: boxes through walls with its own block list (ores by default), Tracers keep theirs.
+- Sus Chunk Finder: grown amethyst buds -> chunk marked red (world curtain + HUD outline + Finder window).
+- Fake blocks (dirt=mace, stone=trident, deepslate=ancient debris, cobbled deepslate=emerald block, end stone=iron block, oak log=gold block, oak planks=diamond block) and butterfly knife via resourcepacks/MyClientFake.
+- Texture editor: Copy / Paste between blocks.
+- Schematic builder walks, looks and places like a player.
+- Donut window: fake scoreboard and fake /pay (visual only).

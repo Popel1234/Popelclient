@@ -12,6 +12,7 @@ public class ModuleManager {
     public final AutoTotem autoTotem = new AutoTotem();
     public final AirPlace airPlace = new AirPlace();
     public final Reach reach = new Reach();
-    public final List<Module> all = List.of(fullbright, motionBlur, tracers, xray, freecam, autoTotem, airPlace, reach);
+    public final SusChunkFinder susChunks = new SusChunkFinder();
+    public final List<Module> all = List.of(fullbright, motionBlur, tracers, xray, freecam, autoTotem, airPlace, reach, susChunks);
     public void tick(MinecraftClient mc) { for (Module m : all) m.tick(mc); }
 }

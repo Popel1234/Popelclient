@@ -7,7 +7,9 @@
     "FireOverlayMixin",
     "ShieldMixin",
     "TotemMixin",
-    "ParticleManagerAccessor"
+    "ParticleManagerAccessor",
+    "ScoreboardMixin",
+    "KnifeMixin"
   ],
   "injectors": {
     "defaultRequire": 0

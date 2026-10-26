@@ -9,6 +9,9 @@ import dev.myclient.cosmetic.Cosmetic.Animation;
 import dev.myclient.cosmetic.Cosmetic.Type;
 import dev.myclient.cosmetic.Palette;
 import dev.myclient.cosmetic.Preview;
+import dev.myclient.fake.FakePack;
+import dev.myclient.fake.FakeScoreboard;
+import dev.myclient.module.SusChunkFinder;
 import dev.myclient.macro.Macro;
 import dev.myclient.module.Module;
 import dev.myclient.texture.TextureLab;
@@ -34,7 +37,8 @@ public class ClientScreen extends Screen {
     public enum Tab {
         MODS("Mods", 170, 250), COSMETICS("Cosmetics", 230, 300), SKIES("Skies", 210, 270), MACROS("Macros", 240, 240),
         EDITOR("Editor", 240, 340), TEXTURES("Textures", 270, 350), BUILDER("Builder", 270, 330),
-        TRACERS("Tracers", 240, 340), EFFECTS("Effects", 200, 270), SEARCH("Search", 240, 330);
+        TRACERS("Tracers", 240, 360), EFFECTS("Effects", 200, 270), SEARCH("Search", 240, 330),
+        FINDER("Finder", 230, 270), FAKE("Fake", 250, 340), DONUT("Donut", 250, 420);
         final String label;
         final int w, h;
         Tab(String l, int w, int h) { label = l; this.w = w; this.h = h; }
@@ -92,6 +96,49 @@ public class ClientScreen extends Screen {
         texBox.onChange = s -> refilterTextures();
         tracerBox.onChange = s -> refilterBlocks();
         schemBox.onChange = s -> refilterSchematics();
+    }
+
+    private static final TextBox donutTitle = new TextBox("Title");
+    private static final TextBox donutMoney = new TextBox("Money");
+    private static final TextBox donutPay = new TextBox("Pay message");
+    private static final TextBox[] donutLines = new TextBox[10];
+    private static boolean donutInit;
+    private static boolean editXray;
+
+    private static void setLine(int i, String v) {
+        while (Settings.fakeLines.size() <= i) Settings.fakeLines.add("");
+        Settings.fakeLines.set(i, v);
+    }
+
+    private static void initDonut() {
+        if (donutInit) return;
+        donutInit = true;
+        donutTitle.text = Settings.fakeTitle;
+        donutTitle.cursor = donutTitle.text.length();
+        donutTitle.onChange = v -> Settings.fakeTitle = v;
+        donutMoney.text = String.valueOf((long) Settings.fakeMoney);
+        donutMoney.cursor = donutMoney.text.length();
+        donutMoney.onChange = v -> { Double d = FakeScoreboard.parseAmount(v); if (d != null) Settings.fakeMoney = d; };
+        donutPay.text = Settings.payFormat;
+        donutPay.cursor = donutPay.text.length();
+        donutPay.onChange = v -> Settings.payFormat = v;
+        for (int i = 0; i < donutLines.length; i++) {
+            final int k = i;
+            TextBox b = new TextBox("Line " + (i + 1));
+            b.text = i < Settings.fakeLines.size() ? Settings.fakeLines.get(i) : "";
+            b.cursor = b.text.length();
+            b.onChange = v -> setLine(k, v);
+            donutLines[i] = b;
+        }
+    }
+
+    private static void donutPreset() {
+        Settings.fakeTitle = "&6&lDonutSMP";
+        Settings.fakeLines = new ArrayList<>(List.of("&fMoney: &a${money}", "&fShards: &d1,240", "&fKills: &c58", "&fDeaths: &c21",
+            "&fPlaytime: &b36h 12m", "&fRegion: &eEU", "", "&edonutsmp.net"));
+        Settings.fakeMoney = 1250000;
+        donutInit = false;
+        initDonut();
     }
 
     private record Hit(Win win, int x, int y, int w, int h, Runnable run) {
@@ -234,6 +281,10 @@ public class ClientScreen extends Screen {
     }
 
     // ======================================================================== helpers
+    private int winHeight(Win w, int lh) {
+        return w.collapsed ? TITLE : Math.min(w.h, Math.max(TITLE + 50, lh - 8));
+    }
+
     private boolean hover(int x, int y, int w, int h) {
         return curWin == topAtMouse && mx >= x && mx < x + w && my >= y && my < y + h && my >= clipY0 && my < clipY1;
     }
@@ -458,7 +509,7 @@ public class ClientScreen extends Screen {
         for (int i = WINS.size() - 1; i >= 0; i--) {
             Win w = WINS.get(i);
             if (!w.open) continue;
-            int hh = w.collapsed ? TITLE : w.h;
+            int hh = winHeight(w, lh);
             if (mx >= w.x && mx < w.x + w.w && my >= w.y && my < w.y + hh) { topAtMouse = w; break; }
         }
 
@@ -467,13 +518,15 @@ public class ClientScreen extends Screen {
         clipY1 = lh;
         Draw.begin(ctx, s, K);
         ctx.fillGradient(0, 0, Math.round(width * s), Math.round(height * s), 0x50050508, 0x80100820);
+        int padT = 16;
+        { int t0 = 0; for (Tab t : Tab.values()) t0 += Ui.width(t.label) + 16 + 3; if (t0 + 80 > lw) padT = 6; }
         int total = 0;
-        for (Tab t : Tab.values()) total += Ui.width(t.label) + 16 + 3;
-        int dx = (lw - total) / 2;
+        for (Tab t : Tab.values()) total += Ui.width(t.label) + padT + 3;
+        int dx = (lw - total - 44) / 2;
         Draw.rr(ctx, dx - 5, 3, total + 7, 24, 12, 0xE60E0E16);
         int tx = dx;
         for (Tab t : Tab.values()) {
-            int w = Ui.width(t.label) + 16;
+            int w = Ui.width(t.label) + padT;
             Win win = win(t);
             boolean open = win != null && win.open;
             boolean hv = hover(tx, 7, w, 16);
@@ -487,6 +540,14 @@ public class ClientScreen extends Screen {
                 else openWindow(target);
             });
             tx += w + 3;
+        }
+        for (int bi = 0; bi < 2; bi++) {   // menu size - / + (always reachable, even when the menu is huge)
+            int bx2 = dx + total + 14 + bi * 20;
+            boolean hvb = hover(bx2 - 8, 7, 16, 16);
+            Draw.circle(ctx, bx2, 15, 8, hvb ? 0xFF3A3A58 : 0xE60E0E16);
+            centered(ctx, bi == 0 ? "-" : "+", bx2, 10, TEXT);
+            final int dir = bi == 0 ? -1 : 1;
+            addHit(bx2 - 8, 7, 16, 16, () -> Settings.guiScale = Math.max(0.5f, Math.min(1.3f, Math.round((Settings.guiScale + dir * 0.05f) * 20f) / 20f)));
         }
         Draw.end(ctx);
 
@@ -509,8 +570,9 @@ public class ClientScreen extends Screen {
         int lh = (int) (height / K);
         clipY0 = 0;
         clipY1 = lh;
+        int hh = winHeight(w, lh);
+        w.y = Math.max(0, Math.min(w.y, Math.max(0, lh - hh)));
         int x = (int) w.x, y = (int) w.y;
-        int hh = w.collapsed ? TITLE : w.h;
         Draw.begin(ctx, s, K);
         Draw.rr(ctx, x - 3, y - 3, w.w + 6, hh + 6, 12, 0x28000000);
         Draw.rr(ctx, x - 1, y - 1, w.w + 2, hh + 2, 10, BORDER);
@@ -529,7 +591,7 @@ public class ClientScreen extends Screen {
         cx = x + 9;
         cy = y + TITLE + 3;
         cw = w.w - 18;
-        ch = w.h - TITLE - 9;
+        ch = hh - TITLE - 9;
         clipY0 = cy;
         clipY1 = cy + ch;
         w.scroll = Math.max(0, Math.min(w.scroll, Math.max(0, w.contentH - ch)));
@@ -548,6 +610,9 @@ public class ClientScreen extends Screen {
             case TRACERS -> renderTracers(ctx, w, y0);
             case EFFECTS -> renderEffects(ctx, w, y0);
             case SEARCH -> renderSearch(ctx, w, y0);
+            case FINDER -> renderFinder(ctx, w, y0);
+            case FAKE -> renderFake(ctx, w, y0);
+            case DONUT -> renderDonut(ctx, w, y0);
         };
         w.contentH = h;
         if (h > ch) {
@@ -857,6 +922,14 @@ public class ClientScreen extends Screen {
             pill(ctx, tx + tw / 2 + 2, gy + i * 20, tw / 2 - 2, 17, "Reset", false, () -> {
                 if (selTex != null) { TextureLab.reset(selTex); toast("Reset - press Apply to reload the original"); }
             });
+            pill(ctx, tx, gy + (i + 1) * 20, tw / 2 - 2, 17, "Copy", false, () -> {
+                if (selTex != null && TextureLab.copy(selTex)) toast("Copied " + selTex);
+            });
+            pill(ctx, tx + tw / 2 + 2, gy + (i + 1) * 20, tw / 2 - 2, 17, "Paste", false, () -> {
+                if (selTex == null) return;
+                if (TextureLab.paste(selTex)) toast("Pasted onto " + selTex + " - press Apply");
+                else toast("Copy a texture first");
+            });
             float pp = Math.max(1f, 22f / size);
             Draw.rr(ctx, tx - 3, gy + 123, pp * size * 2 + 6, pp * size * 2 + 6, 5, TILE);
             for (int a = 0; a < 2; a++) for (int b = 0; b < 2; b++)
@@ -867,7 +940,8 @@ public class ClientScreen extends Screen {
             slider(ctx, "Green", cx, sy + 19, cw - 30, texG, 0, 255, String.valueOf((int) texG), v -> texG = v);
             slider(ctx, "Blue", cx, sy + 38, cw - 30, texB, 0, 255, String.valueOf((int) texB), v -> texB = v);
             Draw.rr(ctx, cx + cw - 24, sy + 3, 22, 28, 7, 0xFF000000 | ((int) texR << 16) | ((int) texG << 8) | (int) texB);
-            bottom = sy + 58;
+            text(ctx, "Clipboard: " + TextureLab.clipInfo(), cx + 2, sy + 58, MUTED);
+            bottom = sy + 74;
         } else {
             text(ctx, "Pick a block texture above", cx + 2, ty, MUTED);
         }
@@ -942,13 +1016,13 @@ public class ClientScreen extends Screen {
             String o = SchematicBuilder.origin == null ? "Origin: not set"
                 : "Origin: " + SchematicBuilder.origin.getX() + " " + SchematicBuilder.origin.getY() + " " + SchematicBuilder.origin.getZ();
             text(ctx, o, cx + 9, yy + 39, TEXT);
-            pill(ctx, cx + 9, yy + 53, cw - 18, 17, "Set origin here (my feet)", false, () -> {
+            pill(ctx, cx + 9, yy + 53, cw - 18, 17, "Set origin 2 blocks ahead", false, () -> {
                 SchematicBuilder.setOriginHere();
                 toast("Origin set to your position");
             });
             text(ctx, "Build", cx + 9, yy + 79, TEXT);
             toggle(ctx, "build", cx + cw - 42, yy + 76, SchematicBuilder.running, () -> SchematicBuilder.setRunning(!SchematicBuilder.running));
-            text(ctx, "Walk to blocks", cx + 9, yy + 98, TEXT);
+            text(ctx, "Auto-move + look", cx + 9, yy + 98, TEXT);
             toggle(ctx, "walk", cx + cw - 42, yy + 95, SchematicBuilder.walk, () -> SchematicBuilder.walk = !SchematicBuilder.walk);
             pill(ctx, cx + 9, yy + 115, cw - 18, 17, "Restart", false, SchematicBuilder::restart);
         }
@@ -957,7 +1031,9 @@ public class ClientScreen extends Screen {
             text(ctx, line, cx + 2, sy + lines * 11, SchematicBuilder.missing.isEmpty() ? ACCENT2 : 0xFFFFB454);
             lines++;
         }
-        for (String line : wrap("Builds bottom to top, in reach only, from your hotbar. Many servers forbid this.", cw - 4)) {
+        text(ctx, "Last click: " + SchematicBuilder.lastClick, cx + 2, sy + lines * 11, MUTED);
+        lines++;
+        for (String line : wrap("Walks, looks at each block and places it like a player, bottom to top, from your hotbar. Many servers forbid this.", cw - 4)) {
             text(ctx, line, cx + 2, sy + lines * 11 + 4, MUTED);
             lines++;
         }
@@ -965,6 +1041,10 @@ public class ClientScreen extends Screen {
     }
 
     // ======================================================================== TRACERS
+    private void flipBlock(String id) {
+        if (editXray) MyClient.MODULES.xray.toggleBlock(id); else MyClient.MODULES.tracers.toggleBlock(id);
+    }
+
     private int renderTracers(DrawContext ctx, Win w, int y0) {
         dev.myclient.module.Tracers tr = MyClient.MODULES.tracers;
         Module xr = MyClient.MODULES.xray;
@@ -973,14 +1053,17 @@ public class ClientScreen extends Screen {
         slider(ctx, "Range", cx, y0 + 72, cw, tr.radius, 16, 512, tr.radius + "m", v -> { tr.radius = Math.round(v / 8f) * 8; tr.changed(); });
 
         int y = y0 + 96;
-        text(ctx, "Selected (" + tr.blocks.size() + ") - click to remove", cx + 2, y, MUTED);
+        pill(ctx, cx, y, cw, 20, "Editing: " + (editXray ? "X-Ray blocks" : "Tracer blocks") + " - click to switch", true, () -> editXray = !editXray);
+        y += 26;
+        java.util.Set<String> set = editXray ? MyClient.MODULES.xray.blocks : tr.blocks;
+        text(ctx, "Selected (" + set.size() + ") - click to remove", cx + 2, y, MUTED);
         y += 13;
-        if (tr.blocks.isEmpty()) {
+        if (set.isEmpty()) {
             text(ctx, "None yet - pick blocks below", cx + 2, y + 2, MUTED);
             y += 18;
         } else {
             int x = cx;
-            for (String id : new ArrayList<>(tr.blocks)) {
+            for (String id : new ArrayList<>(set)) {
                 String label = pretty(id);
                 int cwid = Ui.width(label) + 22;
                 if (x + cwid > cx + cw) { x = cx; y += 20; }
@@ -988,7 +1071,7 @@ public class ClientScreen extends Screen {
                 Draw.rr(ctx, x, y, cwid, 16, 8, hv ? 0xFF4A2A3C : 0xFF26263E);
                 Draw.circle(ctx, x + 8, y + 8, 3, 0xFF000000 | Palette.rainbow((id.hashCode() & 0x7fffffff) % 360 / 360f, 0.65f, 1f));
                 text(ctx, label, x + 15, y + 3, TEXT);
-                addHit(x, y, cwid, 16, () -> tr.toggleBlock(id));
+                addHit(x, y, cwid, 16, () -> flipBlock(id));
                 x += cwid + 4;
             }
             y += 24;
@@ -1005,11 +1088,11 @@ public class ClientScreen extends Screen {
             if (idx >= blockFiltered.size()) break;
             String id = blockFiltered.get(idx);
             int rr = ly + 4 + r * rh;
-            boolean on = tr.blocks.contains(id), hv = hover(cx + 4, rr, cw - 8, rh - 2);
+            boolean on = set.contains(id), hv = hover(cx + 4, rr, cw - 8, rh - 2);
             if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, rh - 2, 8, 0xFF262638);
             text(ctx, Ui.trim(pretty(id), cw - 62), cx + 11, rr + 5, TEXT);
-            addHit(cx + 4, rr, cw - 8, rh - 2, () -> tr.toggleBlock(id));
-            toggle(ctx, "tb:" + id, cx + cw - 42, rr + 2, on, () -> tr.toggleBlock(id));
+            addHit(cx + 4, rr, cw - 8, rh - 2, () -> flipBlock(id));
+            toggle(ctx, "tb:" + (editXray ? "x" : "t") + id, cx + cw - 42, rr + 2, on, () -> flipBlock(id));
         }
         text(ctx, blockFiltered.size() + " blocks (scroll the list)", cx + 3, ly + lh + 3, MUTED);
         return ly + lh + 18 - y0;
@@ -1123,6 +1206,117 @@ public class ClientScreen extends Screen {
         return ly + lh + 18 - y0;
     }
 
+    // ======================================================================== FINDER
+    private int renderFinder(DrawContext ctx, Win w, int y0) {
+        SusChunkFinder f = MyClient.MODULES.susChunks;
+        settingRow(ctx, y0, "Sus Chunk Finder", "Grown amethyst buds -> red chunk", f.isEnabled(), f::toggle);
+        int y = y0 + 38;
+        for (String line : wrap("Scans every loaded chunk from bedrock to the sky for amethyst clusters and large amethyst buds and marks that chunk red (in the world and through walls).", cw - 4)) {
+            text(ctx, line, cx + 2, y, MUTED);
+            y += 11;
+        }
+        y += 4;
+        text(ctx, "Chunks scanned: " + f.scanned + "   Sus chunks: " + f.found.size(), cx + 2, y, TEXT);
+        y += 16;
+        List<SusChunkFinder.Sus> list = new ArrayList<>(f.found.values());
+        if (client.player != null) {
+            final double px = client.player.getX(), pz = client.player.getZ();
+            list.sort(Comparator.comparingDouble(c -> Math.pow(c.cx * 16 + 8 - px, 2) + Math.pow(c.cz * 16 + 8 - pz, 2)));
+        }
+        if (list.isEmpty()) text(ctx, f.isEnabled() ? "Nothing found yet" : "Turn it on above", cx + 2, y, MUTED);
+        int shown = 0;
+        for (SusChunkFinder.Sus c : list) {
+            if (shown++ >= 40) break;
+            boolean hv = hover(cx, y, cw, 26);
+            Draw.rr(ctx, cx, y, cw, 26, 8, hv ? CARD_HOVER : CARD);
+            Draw.circle(ctx, cx + 11, y + 13, 4, 0xFFFF3030);
+            text(ctx, "Chunk " + c.cx + ", " + c.cz, cx + 22, y + 4, TEXT);
+            text(ctx, "Block " + c.cx * 16 + ", " + c.cz * 16 + "  -  " + c.count + " buds", cx + 22, y + 15, MUTED);
+            addHit(cx, y, cw, 26, () -> toast("Chunk " + c.cx + ", " + c.cz + " -> go to X " + (c.cx * 16 + 8) + "  Z " + (c.cz * 16 + 8)));
+            y += 30;
+        }
+        return y - y0 + 6;
+    }
+
+    // ======================================================================== FAKE (textures + knife)
+    private void applyFake() {
+        try {
+            FakePack.apply();
+            toast("Applying - the game reloads resources...");
+        } catch (Exception e) {
+            toast("Could not write the pack");
+        }
+    }
+
+    private int renderFake(DrawContext ctx, Win w, int y0) {
+        int y = y0;
+        settingRow(ctx, y, "Fake blocks", "Blocks look like other blocks", Settings.fakeBlocks, () -> { Settings.fakeBlocks = !Settings.fakeBlocks; applyFake(); });
+        y += 36;
+        text(ctx, "Blocks that change:", cx + 2, y, MUTED);
+        y += 14;
+        for (FakePack.Swap s : FakePack.SWAPS) {
+            List<String> notes = wrap("Affects: " + s.affects(), cw - 20);
+            int h = 22 + notes.size() * 11;
+            Draw.rr(ctx, cx, y, cw, h, 8, CARD);
+            text(ctx, s.from() + "  ->  " + s.to(), cx + 9, y + 5, Settings.fakeBlocks ? TEXT : 0xFFB8B8D0);
+            int ny = y + 18;
+            for (String n : notes) { text(ctx, n, cx + 9, ny, MUTED); ny += 11; }
+            y += h + 4;
+        }
+        y += 8;
+        settingRow(ctx, y, "Butterfly knife", "Every sword becomes a knife", Settings.butterfly, () -> { Settings.butterfly = !Settings.butterfly; applyFake(); });
+        y += 36;
+        for (String line : wrap("The knife flips when you swing (first person). Pack folder: resourcepacks/MyClientFake.", cw - 4)) {
+            text(ctx, line, cx + 2, y, MUTED);
+            y += 11;
+        }
+        return y + 8 - y0;
+    }
+
+    // ======================================================================== DONUT (fake scoreboard + fake /pay)
+    private int renderDonut(DrawContext ctx, Win w, int y0) {
+        initDonut();
+        if (focus != donutMoney) {
+            donutMoney.text = String.valueOf((long) Settings.fakeMoney);
+            donutMoney.cursor = Math.min(donutMoney.cursor, donutMoney.text.length());
+        }
+        int y = y0;
+        settingRow(ctx, y, "Fake scoreboard", "Only on your screen", Settings.fakeScoreboard, () -> Settings.fakeScoreboard = !Settings.fakeScoreboard);
+        y += 34;
+        settingRow(ctx, y, "Hide real scoreboard", "Hides the server's board", Settings.hideRealScoreboard, () -> Settings.hideRealScoreboard = !Settings.hideRealScoreboard);
+        y += 38;
+        text(ctx, "Title", cx + 2, y, MUTED);
+        box(ctx, donutTitle, cx, y + 12, cw, 22);
+        y += 40;
+        text(ctx, "Money (use {money} in a line)", cx + 2, y, MUTED);
+        box(ctx, donutMoney, cx, y + 12, cw, 22);
+        y += 40;
+        text(ctx, "Lines (& = colors, e.g. &a green)", cx + 2, y, MUTED);
+        y += 13;
+        for (int i = 0; i < donutLines.length; i++) {
+            box(ctx, donutLines[i], cx, y, cw, 20);
+            y += 24;
+        }
+        pill(ctx, cx, y, cw, 20, "Load DonutSMP-style preset", false, DonutPresetRunner::run);
+        y += 34;
+        settingRow(ctx, y, "Fake /pay", "/pay is not sent, only shown", Settings.fakePay, () -> Settings.fakePay = !Settings.fakePay);
+        y += 34;
+        settingRow(ctx, y, "Deduct fake money", "Fake scoreboard money goes down", Settings.payDeduct, () -> Settings.payDeduct = !Settings.payDeduct);
+        y += 38;
+        text(ctx, "Pay message ({player} {amount})", cx + 2, y, MUTED);
+        box(ctx, donutPay, cx, y + 12, cw, 22);
+        y += 42;
+        for (String line : wrap("Visual only: nothing is sent to the server and nobody else sees it. Do not use it to mislead other players.", cw - 4)) {
+            text(ctx, line, cx + 2, y, MUTED);
+            y += 11;
+        }
+        return y + 8 - y0;
+    }
+
+    private static final class DonutPresetRunner {
+        static void run() { donutPreset(); }
+    }
+
     // ======================================================================== drag & drop
     private void handleDrop(List<Path> paths) {
         int ok = 0;
@@ -1144,7 +1338,7 @@ public class ClientScreen extends Screen {
         for (int i = WINS.size() - 1; i >= 0; i--) {
             Win w = WINS.get(i);
             if (!w.open) continue;
-            int hh = w.collapsed ? TITLE : w.h;
+            int hh = winHeight(w, (int) (height / K()));
             if (x >= w.x && x < w.x + w.w && y >= w.y && y < w.y + hh) return w;
         }
         return null;
@@ -1264,6 +1458,14 @@ public class ClientScreen extends Screen {
                 try { clip = client.keyboard.getClipboard(); } catch (Exception ignored) {}
             }
             focus.key(keyCode, modifiers, clip);
+            return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_MINUS || keyCode == GLFW.GLFW_KEY_KP_SUBTRACT) {
+            Settings.guiScale = Math.max(0.5f, Math.round((Settings.guiScale - 0.05f) * 20f) / 20f);
+            return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_EQUAL || keyCode == GLFW.GLFW_KEY_KP_ADD) {
+            Settings.guiScale = Math.min(1.3f, Math.round((Settings.guiScale + 0.05f) * 20f) / 20f);
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_Z && (modifiers & GLFW.GLFW_MOD_CONTROL) != 0 && selTex != null) {

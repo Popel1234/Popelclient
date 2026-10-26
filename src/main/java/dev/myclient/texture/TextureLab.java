@@ -140,6 +140,37 @@ public final class TextureLab {
         try { Files.deleteIfExists(file(name)); } catch (IOException ignored) {}
     }
 
+    // ---------------------------------------------------------------- copy / paste between blocks
+    private static BufferedImage clip;
+    private static String clipName = "";
+
+    public static boolean copy(String name) {
+        BufferedImage img = get(name);
+        if (img == null) return false;
+        int s = size(img);
+        BufferedImage c = new BufferedImage(s, s, BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < s; y++) for (int x = 0; x < s; x++) c.setRGB(x, y, img.getRGB(x, y));
+        clip = c;
+        clipName = name;
+        return true;
+    }
+
+    /** Pastes the copied texture onto this block (scaled if the sizes differ). */
+    public static boolean paste(String name) {
+        if (clip == null) return false;
+        BufferedImage img = get(name);
+        if (img == null) return false;
+        beginStroke(name);
+        int ts = size(img), cs = clip.getWidth();
+        for (int y = 0; y < ts; y++) for (int x = 0; x < ts; x++) img.setRGB(x, y, clip.getRGB(x * cs / ts, y * cs / ts));
+        dirty.add(name);
+        return true;
+    }
+
+    public static String clipInfo() {
+        return clip == null ? "empty" : clipName + " (" + clip.getWidth() + "x" + clip.getHeight() + ")";
+    }
+
     // ---------------------------------------------------------------- pack handling
     public static boolean packExists() { return Files.exists(packDir().resolve("pack.mcmeta")); }
 

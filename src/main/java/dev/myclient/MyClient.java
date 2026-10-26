@@ -3,6 +3,8 @@ package dev.myclient;
 import dev.myclient.builder.SchematicBuilder;
 import dev.myclient.cosmetic.CosmeticFeature;
 import dev.myclient.cosmetic.Impulse;
+import dev.myclient.fake.FakePay;
+import dev.myclient.fake.FakeScoreboard;
 import dev.myclient.fx.WorldFx;
 import dev.myclient.cosmetic.CosmeticManager;
 import dev.myclient.cosmetic.Particles;
@@ -40,7 +42,11 @@ public class MyClient implements ClientModInitializer {
             }
         });
 
-        HudRenderCallback.EVENT.register((ctx, tickCounter) -> TracerRenderer.render(ctx));
+        HudRenderCallback.EVENT.register((ctx, tickCounter) -> {
+            FakeScoreboard.render(ctx);
+            TracerRenderer.render(ctx);
+        });
+        FakePay.register();
         WorldFx.register();
 
         AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
