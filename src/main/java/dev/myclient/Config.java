@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import dev.myclient.cosmetic.Cosmetic;
 import dev.myclient.cosmetic.CosmeticManager;
+import dev.myclient.fake.FakeSpawners;
 import dev.myclient.gui.ClientScreen;
 import dev.myclient.macro.Macro;
 import dev.myclient.module.Module;
@@ -39,6 +40,12 @@ public final class Config {
         public List<String> fakeLines;
         public String payFormat;
         public double fakeMoney = -1;
+        public Map<String, Integer> keybinds = new HashMap<>();
+        public int theme = 0;
+        public List<String> spawners = new ArrayList<>();
+        public String spawnerBlock;
+        public String earnFormat;
+        public int titleFrom = -1, titleTo = -1;
     }
 
     public static Data data = new Data();
@@ -75,6 +82,15 @@ public final class Config {
             d.flags.put("jumpFx", Settings.jumpFx);
             d.flags.put("hitFx", Settings.hitFx);
             d.flags.put("hurtFlash", Settings.hurtFlash);
+            d.flags.put("fakeSpawner", Settings.fakeSpawner);
+            d.flags.put("payInChat", Settings.payInChat);
+            d.keybinds = new HashMap<>(Keybinds.bindings);
+            d.theme = Settings.theme;
+            d.spawners = FakeSpawners.serialize();
+            d.spawnerBlock = Settings.spawnerBlock;
+            d.earnFormat = Settings.earnFormat;
+            d.titleFrom = Settings.titleFrom;
+            d.titleTo = Settings.titleTo;
             d.flags.put("fakeBlocks", Settings.fakeBlocks);
             d.flags.put("butterfly", Settings.butterfly);
             d.flags.put("fakeScoreboard", Settings.fakeScoreboard);
@@ -150,6 +166,8 @@ public final class Config {
                 Settings.jumpFx = d.flags.getOrDefault("jumpFx", true);
                 Settings.hitFx = d.flags.getOrDefault("hitFx", true);
                 Settings.hurtFlash = d.flags.getOrDefault("hurtFlash", true);
+                Settings.fakeSpawner = d.flags.getOrDefault("fakeSpawner", false);
+                Settings.payInChat = d.flags.getOrDefault("payInChat", false);
                 Settings.fakeBlocks = d.flags.getOrDefault("fakeBlocks", false);
                 Settings.butterfly = d.flags.getOrDefault("butterfly", false);
                 Settings.fakeScoreboard = d.flags.getOrDefault("fakeScoreboard", false);
@@ -162,9 +180,17 @@ public final class Config {
                 MyClient.MODULES.xray.blocks.clear();
                 MyClient.MODULES.xray.blocks.addAll(d.xrayBlocks);
             }
-            if (d.fakeTitle != null) Settings.fakeTitle = d.fakeTitle;
+            if (d.keybinds != null) { Keybinds.bindings.clear(); Keybinds.bindings.putAll(d.keybinds); }
+            Settings.theme = d.theme;
+            if (d.spawners != null) FakeSpawners.load(d.spawners);
+            if (d.spawnerBlock != null) Settings.spawnerBlock = d.spawnerBlock;
+            if (d.earnFormat != null) Settings.earnFormat = d.earnFormat;
+            if (d.titleFrom >= 0) Settings.titleFrom = d.titleFrom;
+            if (d.titleTo >= 0) Settings.titleTo = d.titleTo;
+            if (d.fakeTitle != null) Settings.fakeTitle = d.fakeTitle.equals("&6&lDonutSMP") ? "DonutSMP" : d.fakeTitle;
             if (d.fakeLines != null) Settings.fakeLines = new ArrayList<>(d.fakeLines);
-            if (d.payFormat != null) Settings.payFormat = d.payFormat;
+            if (!Settings.fakeLines.isEmpty() && Settings.fakeLines.get(0).startsWith("&fMoney: ")) Settings.fakeLines = new ArrayList<>(Settings.defaultLines());
+            if (d.payFormat != null && !d.payFormat.equals("&ayou payed {player} {amount}")) Settings.payFormat = d.payFormat;
             if (d.fakeMoney >= 0) Settings.fakeMoney = d.fakeMoney;
             if (d.modules != null) {
                 for (Module m : MyClient.MODULES.all) {

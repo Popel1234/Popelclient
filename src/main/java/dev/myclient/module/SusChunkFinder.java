@@ -33,6 +33,8 @@ public class SusChunkFinder extends Module {
 
     public final Map<Long, Sus> found = new HashMap<>();
     public int scanned;
+    /** chunks that contain ANY amethyst (budding block, small/medium/large buds, clusters): helps to see whether the server hides them */
+    public final Set<Long> anyAmethyst = new HashSet<>();
     private final Set<Long> announced = new HashSet<>();
     private final List<Long> order = new ArrayList<>();
     private int cursor, tickCount;
@@ -40,19 +42,22 @@ public class SusChunkFinder extends Module {
     public SusChunkFinder() { super("Sus Chunk Finder"); }
 
     @Override
-    protected void onDisable() { found.clear(); announced.clear(); order.clear(); }
+    protected void onDisable() { found.clear(); announced.clear(); order.clear(); anyAmethyst.clear(); scanned = 0; }
 
     private void scanChunk(MinecraftClient mc, int cx, int cz) {
         long key = ChunkPos.toLong(cx, cz);
         Chunk ch = mc.world.getChunkManager().getChunk(cx, cz, ChunkStatus.FULL, false);
-        if (ch == null) { found.remove(key); announced.remove(key); return; }
+        if (ch == null) { found.remove(key); announced.remove(key); anyAmethyst.remove(key); return; }
         scanned++;
         int count = 0;
         BlockPos first = null;
+        boolean any = false;
         ChunkSection[] sections = ch.getSectionArray();
         for (int i = 0; i < sections.length; i++) {
             ChunkSection sec = sections[i];
             if (sec == null || sec.isEmpty()) continue;
+            if (sec.hasAny(st -> st.isOf(Blocks.BUDDING_AMETHYST) || st.isOf(Blocks.SMALL_AMETHYST_BUD) || st.isOf(Blocks.MEDIUM_AMETHYST_BUD)
+                || st.isOf(Blocks.LARGE_AMETHYST_BUD) || st.isOf(Blocks.AMETHYST_CLUSTER))) any = true;
             if (!sec.hasAny(st -> st.isOf(Blocks.AMETHYST_CLUSTER) || st.isOf(Blocks.LARGE_AMETHYST_BUD))) continue;
             int baseY = ch.getBottomY() + i * 16;
             for (int x = 0; x < 16; x++) for (int y = 0; y < 16; y++) for (int z = 0; z < 16; z++) {
@@ -63,6 +68,7 @@ public class SusChunkFinder extends Module {
                 }
             }
         }
+        if (any) anyAmethyst.add(key); else anyAmethyst.remove(key);
         if (count > 0) {
             Sus s = found.computeIfAbsent(key, k -> new Sus(cx, cz));
             s.count = count;

@@ -14,10 +14,12 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.stream.Stream;
 
 /**
- * Fake block textures and the butterfly knife, delivered through an automatically managed resource pack
- * (resourcepacks/MyClientFake). Turning the settings on/off rewrites the pack and reloads the game.
+ * Fake blocks (real 3D models), the butterfly knife and the fake skeleton spawner, delivered through an
+ * automatically managed resource pack (resourcepacks/MyClientFake). Changing a setting rewrites the pack
+ * and reloads the game's resources.
  */
 public final class FakePack {
     private FakePack() {}
@@ -25,24 +27,17 @@ public final class FakePack {
     public static final String NAME = "MyClientFake";
     public static final String ID = "file/" + NAME;
 
-    /** from -> to, which texture files change, where the new look comes from, and every block that is affected. */
-    public record Swap(String from, String to, String affects, String[] targets, String[] sources, int bg) {}
+    /** What a block turns into and which blocks / items are affected. */
+    public record Swap(String from, String to, String affects) {}
 
     public static final List<Swap> SWAPS = List.of(
-        new Swap("Dirt Block", "Mace", "Dirt, Grass Block (bottom), Podzol (bottom), Mycelium (bottom), Farmland (bottom), Dirt Path (bottom)",
-            new String[]{"dirt"}, new String[]{"item/mace"}, 0xFF5B4636),
-        new Swap("Stone", "Trident", "Stone, Stone Stairs, Stone Slab, Stone Button, Stone Pressure Plate, Infested Stone",
-            new String[]{"stone"}, new String[]{"item/trident"}, 0xFF4A5A66),
-        new Swap("Deepslate", "Ancient Debris", "Deepslate, Infested Deepslate",
-            new String[]{"deepslate", "deepslate_top"}, new String[]{"block/ancient_debris_side", "block/ancient_debris_top"}, 0),
-        new Swap("Cobbled Deepslate", "Emerald Block", "Cobbled Deepslate, its Stairs, Slab and Wall",
-            new String[]{"cobbled_deepslate"}, new String[]{"block/emerald_block"}, 0),
-        new Swap("End Stone", "Iron Block", "End Stone",
-            new String[]{"end_stone"}, new String[]{"block/iron_block"}, 0),
-        new Swap("Oak Log", "Gold Block", "Oak Log, Oak Wood",
-            new String[]{"oak_log", "oak_log_top"}, new String[]{"block/gold_block", "block/gold_block"}, 0),
-        new Swap("Oak Planks", "Diamond Block", "Oak Planks, Stairs, Slab, Fence, Fence Gate, Button, Pressure Plate",
-            new String[]{"oak_planks"}, new String[]{"block/diamond_block"}, 0));
+        new Swap("Dirt Block", "Mace", "Dirt (placed block and inventory item, as a real 3D mace)"),
+        new Swap("Stone", "Trident", "Stone and Infested Stone (as a real 3D trident)"),
+        new Swap("Deepslate", "Ancient Debris", "Deepslate, Infested Deepslate"),
+        new Swap("Cobbled Deepslate", "Emerald Block", "Cobbled Deepslate"),
+        new Swap("End Stone", "Iron Block", "End Stone"),
+        new Swap("Oak Log", "Gold Block", "Oak Log (every direction)"),
+        new Swap("Oak Planks", "Diamond Block", "Oak Planks"));
 
     private static Path dir() {
         return FabricLoader.getInstance().getGameDir().resolve("resourcepacks").resolve(NAME);
@@ -66,9 +61,30 @@ public final class FakePack {
         }
     }
 
-    /** Puts see-through item art (mace, trident) on a solid background so the block face is not holey. */
+    /** Average colours of an item sprite: [head (upper right), shaft (lower left)]. */
+    private static int[] sample(String itemPath, int headFallback, int shaftFallback) {
+        BufferedImage img = read(itemPath);
+        if (img == null) return new int[]{headFallback, shaftFallback};
+        int s = img.getWidth();
+        long[] h = new long[4], sh = new long[4];
+        for (int y = 0; y < s; y++) {
+            for (int x = 0; x < s; x++) {
+                int p = img.getRGB(x, y);
+                if ((p >>> 24) < 200) continue;
+                double fx = x / (double) s, fy = y / (double) s;
+                long[] t = (fx + (1 - fy)) > 1.15 ? h : ((fx + (1 - fy)) < 0.85 ? sh : null);
+                if (t == null) continue;
+                t[0] += (p >> 16) & 255; t[1] += (p >> 8) & 255; t[2] += p & 255; t[3]++;
+            }
+        }
+        return new int[]{h[3] > 0 ? avg(h) : headFallback, sh[3] > 0 ? avg(sh) : shaftFallback};
+    }
+
+    private static int avg(long[] a) {
+        return ((int) (a[0] / a[3]) << 16) | ((int) (a[1] / a[3]) << 8) | (int) (a[2] / a[3]);
+    }
+
     private static BufferedImage compose(BufferedImage src, int bg) {
-        if (bg == 0) return src;
         int s = src.getWidth();
         BufferedImage out = new BufferedImage(s, s, BufferedImage.TYPE_INT_ARGB);
         for (int y = 0; y < s; y++) {
@@ -84,8 +100,72 @@ public final class FakePack {
         return out;
     }
 
-    private static Path texPath(Path root, String target) {
-        return root.resolve("assets").resolve("minecraft").resolve("textures").resolve("block").resolve(target + ".png");
+    private static void write(Path root, String rel, String content) throws IOException {
+        Path f = root.resolve(rel);
+        Files.createDirectories(f.getParent());
+        Files.writeString(f, content);
+    }
+
+    private static void writePng(Path root, String rel, BufferedImage img) throws IOException {
+        Path f = root.resolve(rel);
+        Files.createDirectories(f.getParent());
+        ImageIO.write(img, "png", f.toFile());
+    }
+
+    private static String cube(String parent, String... kv) {
+        StringBuilder t = new StringBuilder();
+        for (int i = 0; i < kv.length; i += 2) {
+            if (t.length() > 0) t.append(",");
+            t.append("\"").append(kv[i]).append("\":\"").append(kv[i + 1]).append("\"");
+        }
+        return "{\"parent\":\"" + parent + "\",\"textures\":{" + t + "}}";
+    }
+
+    private static void blockModel(Path root, String name, String json) throws IOException {
+        write(root, "assets/minecraft/models/block/" + name + ".json", json);
+    }
+
+    private static void writeFakeBlocks(Path root) throws IOException {
+        int[] mace = sample("item/mace", 0x5A5F69, 0x8B8F96);
+        int[] trident = sample("item/trident", 0x4FA9A5, 0x7A6A55);
+        writePng(root, "assets/myclient/textures/block/fake_mace.png", BlockModels.palette(mace[0], mace[1]));
+        writePng(root, "assets/myclient/textures/block/fake_trident.png", BlockModels.palette(trident[0], trident[1]));
+        blockModel(root, "dirt", BlockModels.mace("myclient:block/fake_mace"));
+        blockModel(root, "stone", BlockModels.trident("myclient:block/fake_trident"));
+        blockModel(root, "deepslate", cube("minecraft:block/cube_column", "end", "minecraft:block/ancient_debris_top", "side", "minecraft:block/ancient_debris_side"));
+        blockModel(root, "cobbled_deepslate", cube("minecraft:block/cube_all", "all", "minecraft:block/emerald_block"));
+        blockModel(root, "end_stone", cube("minecraft:block/cube_all", "all", "minecraft:block/iron_block"));
+        blockModel(root, "oak_log", cube("minecraft:block/cube_column", "end", "minecraft:block/gold_block", "side", "minecraft:block/gold_block"));
+        blockModel(root, "oak_log_horizontal", cube("minecraft:block/cube_column_horizontal", "end", "minecraft:block/gold_block", "side", "minecraft:block/gold_block"));
+        blockModel(root, "oak_planks", cube("minecraft:block/cube_all", "all", "minecraft:block/diamond_block"));
+    }
+
+    private static void writeSpawner(Path root) throws IOException {
+        Identifier id = Identifier.tryParse(Settings.spawnerBlock);
+        if (id == null) return;
+        String ns = id.getNamespace(), path = id.getPath();
+
+        BufferedImage cage = read("block/spawner");
+        BufferedImage tex = cage == null ? new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB) : compose(cage, 0xFF0F1117);
+        if (cage == null) for (int y = 0; y < 16; y++) for (int x = 0; x < 16; x++) tex.setRGB(x, y, 0xFF2A2D38);
+        String[] skull = {"..XXXX..", ".XXXXXX.", "XXXXXXXX", "XDDXXDDX", "XDDXXDDX", "XXXDDXXX", ".XXXXXX.", "..X.X.X."};
+        for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
+                char c = skull[y].charAt(x);
+                if (c == 'X') tex.setRGB(4 + x, 4 + y, 0xFFD9DADF);
+                else if (c == 'D') tex.setRGB(4 + x, 4 + y, 0xFF16171C);
+            }
+        }
+        writePng(root, "assets/myclient/textures/block/fake_spawner.png", tex);
+        write(root, "assets/myclient/models/block/fake_spawner.json",
+            "{\"parent\":\"minecraft:block/cube_all\",\"textures\":{\"all\":\"myclient:block/fake_spawner\"}}");
+        write(root, "assets/" + ns + "/blockstates/" + path + ".json",
+            "{\"multipart\":[{\"apply\":{\"model\":\"myclient:block/fake_spawner\"}}]}");
+        write(root, "assets/" + ns + "/items/" + path + ".json",
+            "{\"model\":{\"type\":\"minecraft:model\",\"model\":\"myclient:block/fake_spawner\"}}");
+        String lang = "{\"block." + ns + "." + path + "\":\"Skeleton Spawner\"}";
+        write(root, "assets/" + ns + "/lang/en_us.json", lang);
+        write(root, "assets/" + ns + "/lang/de_de.json", lang);
     }
 
     public static boolean isEnabled() {
@@ -108,37 +188,34 @@ public final class FakePack {
         mc.options.refreshResourcePacks(mgr);
     }
 
+    private static void deleteTree(Path p) throws IOException {
+        if (!Files.exists(p)) return;
+        try (Stream<Path> s = Files.walk(p)) {
+            List<Path> all = new ArrayList<>();
+            s.forEach(all::add);
+            Collections.reverse(all);
+            for (Path f : all) Files.deleteIfExists(f);
+        }
+    }
+
     /** Rewrites the pack for the current settings and reloads resources. */
     public static void apply() throws IOException {
         Path root = dir();
-        Set<String> written = new HashSet<>();
-        if (Settings.fakeBlocks) {
-            for (Swap s : SWAPS) {
-                for (int i = 0; i < s.targets().length; i++) {
-                    BufferedImage src = read(s.sources()[i]);
-                    if (src == null) continue;
-                    Path f = texPath(root, s.targets()[i]);
-                    Files.createDirectories(f.getParent());
-                    ImageIO.write(compose(src, s.bg()), "png", f.toFile());
-                    written.add(f.toString());
-                }
-            }
-        }
-        if (Settings.butterfly) ButterflyKnife.write(root, written);
-
-        List<Path> all = new ArrayList<>(ButterflyKnife.files(root));
-        for (Swap s : SWAPS) for (String t : s.targets()) all.add(texPath(root, t));
-        for (Path f : all) if (!written.contains(f.toString())) Files.deleteIfExists(f);
+        deleteTree(root.resolve("assets"));
+        boolean any = false;
+        if (Settings.fakeBlocks) { writeFakeBlocks(root); any = true; }
+        if (Settings.butterfly) { ButterflyKnife.write(root, new HashSet<>()); any = true; }
+        if (Settings.fakeSpawner) { writeSpawner(root); any = true; }
 
         MinecraftClient mc = MinecraftClient.getInstance();
-        if (written.isEmpty()) {
+        if (!any) {
             if (isEnabled()) setEnabled(false);
             return;
         }
         Files.createDirectories(root);
         Files.writeString(root.resolve("pack.mcmeta"),
             "{\"pack\":{\"pack_format\":46,\"supported_formats\":{\"min_inclusive\":34,\"max_inclusive\":99},"
-                + "\"description\":\"Lumen fake textures and butterfly knife\"}}");
+                + "\"description\":\"Lumen fake blocks, butterfly knife and spawner\"}}");
         if (isEnabled()) mc.reloadResources(); else setEnabled(true);
     }
 }

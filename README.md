@@ -52,3 +52,11 @@ Still to build (version-specific, needs a dev environment to test):
 - Texture editor: Copy / Paste between blocks.
 - Schematic builder walks, looks and places like a player.
 - Donut window: fake scoreboard and fake /pay (visual only).
+
+## v0.7
+- Fake blocks are real models now: dirt = 3D mace, stone = 3D trident, deepslate = ancient debris, cobbled deepslate = emerald block, end stone = iron block, oak log = gold block, oak planks = diamond block.
+- Fake skeleton spawner: pick any block, place it (spawner sound), right click for the spawner menu, bones $150 / arrows $3 sell.
+- Fake scoreboard in the DonutSMP style (hex colours, gradient title, compact money). Fake /pay and sales show on the action bar.
+- Right-click almost anything in the menu and press a key to bind it (works without opening the menu).
+- Freecam rewritten (camera follows the mouse, Ctrl = fast). New menu themes (Ember, Ocean, Frost, Violet).
+- Schematic builder reads block properties and places stairs, slabs, logs and furnaces with the right orientation.

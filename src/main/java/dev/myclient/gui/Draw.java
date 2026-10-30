@@ -14,6 +14,8 @@ public final class Draw {
     public static float ss = 2f;
     /** GUI scale factor (the menu is drawn at this fraction of normal size). */
     public static float k = 1f;
+    /** Scales corner radii of non-circular shapes (themes with sharper or rounder corners). */
+    public static float radiusScale = 1f;
 
     private static float u(float v) { return v * ss * k; }
 
@@ -64,7 +66,8 @@ public final class Draw {
     public static void rrGrad(DrawContext c, float x, float y, float w, float h, float r, int top, int bot) {
         int X = Math.round(u(x)), Y = Math.round(u(y)), W = Math.round(u(w)), H = Math.round(u(h));
         if (W <= 0 || H <= 0) return;
-        float R = Math.max(0f, Math.min(u(r), Math.min(W, H) / 2f));
+        boolean circle = Math.abs(w - h) < 0.5f && r >= Math.min(w, h) / 2f - 0.5f;
+        float R = Math.max(0f, Math.min(u(circle ? r : r * radiusScale), Math.min(W, H) / 2f));
         for (int i = 0; i < H; i++) {
             int k = Math.min(i, H - 1 - i);
             float inset = 0f;

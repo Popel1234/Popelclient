@@ -4,6 +4,7 @@ import dev.myclient.builder.SchematicBuilder;
 import dev.myclient.cosmetic.CosmeticFeature;
 import dev.myclient.cosmetic.Impulse;
 import dev.myclient.fake.FakePay;
+import dev.myclient.fake.FakeSpawners;
 import dev.myclient.fake.FakeScoreboard;
 import dev.myclient.fx.WorldFx;
 import dev.myclient.cosmetic.CosmeticManager;
@@ -47,6 +48,7 @@ public class MyClient implements ClientModInitializer {
             TracerRenderer.render(ctx);
         });
         FakePay.register();
+        FakeSpawners.register();
         WorldFx.register();
 
         AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
@@ -72,6 +74,8 @@ public class MyClient implements ClientModInitializer {
             MACROS.tick(mc);
             Particles.tick(mc);
             SchematicBuilder.tick(mc);
+            Keybinds.tick(mc);
+            FakeSpawners.tick(mc);
             if (++saveTimer >= 1200) { saveTimer = 0; Config.save(); }
         });
     }

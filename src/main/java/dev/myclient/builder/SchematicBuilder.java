@@ -3,10 +3,16 @@ package dev.myclient.builder;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.StairsBlock;
+import net.minecraft.block.enums.BlockHalf;
+import net.minecraft.block.enums.SlabType;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.item.Item;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
+import net.minecraft.state.property.Properties;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
@@ -18,6 +24,7 @@ import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -27,8 +34,9 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * Builds a loaded Litematica schematic like a player would: walks next to the next block, turns the camera
- * towards it, swings the arm and places it. Bottom to top. Pauses when a needed block is not in the hotbar.
+ * Builds a loaded Litematica schematic like a player: walks next to the next block, turns the camera to it,
+ * swings the arm and places it with the right orientation (log axis, stairs facing/half, slab type ...).
+ * Bottom to top. Pauses when a needed block is not in the hotbar.
  */
 public final class SchematicBuilder {
     private SchematicBuilder() {}
@@ -115,7 +123,6 @@ public final class SchematicBuilder {
         return -1;
     }
 
-    /** Turns the camera smoothly towards a point. Returns true when it is looking (almost) straight at it. */
     private static boolean lookAt(ClientPlayerEntity p, Vec3d eye, Vec3d t) {
         double dx = t.x - eye.x, dy = t.y - eye.y, dz = t.z - eye.z;
         float ty = (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0);
@@ -126,6 +133,71 @@ public final class SchematicBuilder {
         p.setYaw(p.getYaw() + sy);
         p.setPitch(MathHelper.clamp(p.getPitch() + sp, -90f, 90f));
         return Math.abs(dyaw) < 7f && Math.abs(dp) < 7f;
+    }
+
+    /** Tells the server which way we "face" right now (needed for stairs, furnaces ...) without moving the camera. */
+    private static void sendLook(ClientPlayerEntity p, float yaw, float pitch) {
+        try {
+            for (Constructor<?> c : PlayerMoveC2SPacket.LookAndOnGround.class.getConstructors()) {
+                Class<?>[] t = c.getParameterTypes();
+                if (t.length == 3 && t[0] == float.class && t[1] == float.class && t[2] == boolean.class) {
+                    p.networkHandler.sendPacket((Packet<?>) c.newInstance(yaw, pitch, p.isOnGround()));
+                    return;
+                }
+                if (t.length == 4 && t[0] == float.class && t[1] == float.class && t[2] == boolean.class && t[3] == boolean.class) {
+                    p.networkHandler.sendPacket((Packet<?>) c.newInstance(yaw, pitch, p.isOnGround(), p.horizontalCollision));
+                    return;
+                }
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private static final class Plan {
+        Direction face;
+        BlockPos nb;
+        Vec3d hit;
+        double dist;
+        float yaw = Float.NaN;
+    }
+
+    /** Picks the neighbour/face to click on so the block comes out with the wanted orientation. */
+    private static Plan plan(World w, BlockPos pos, BlockState want, Vec3d eye) {
+        Double yFrac = null;
+        boolean wantTop = false, wantBottom = false;
+        if (want.contains(Properties.SLAB_TYPE)) {
+            SlabType t = want.get(Properties.SLAB_TYPE);
+            wantTop = t == SlabType.TOP; wantBottom = t != SlabType.TOP;
+        } else if (want.contains(Properties.BLOCK_HALF)) {
+            wantTop = want.get(Properties.BLOCK_HALF) == BlockHalf.TOP; wantBottom = !wantTop;
+        }
+        if (wantTop) yFrac = 0.75; else if (wantBottom) yFrac = 0.25;
+
+        Plan best = null;
+        double bestScore = Double.MAX_VALUE;
+        for (Direction d : Direction.values()) {
+            BlockPos nb2 = pos.offset(d);
+            BlockState ns = w.getBlockState(nb2);
+            if (ns.isAir() || ns.isReplaceable() || ns.getCollisionShape(w, nb2).isEmpty()) continue;
+            Direction f = d.getOpposite();
+            Vec3d hp = Vec3d.ofCenter(nb2).add(f.getOffsetX() * 0.5, f.getOffsetY() * 0.5, f.getOffsetZ() * 0.5);
+            if (f.getAxis().isHorizontal() && yFrac != null) hp = new Vec3d(hp.x, nb2.getY() + yFrac, hp.z);
+            double dist = eye.squaredDistanceTo(hp);
+            double score = dist;
+            if (want.contains(Properties.AXIS) && f.getAxis() != want.get(Properties.AXIS)) score += 1000;
+            if (wantTop && f == Direction.UP) score += 500;
+            if (wantBottom && f == Direction.DOWN) score += 500;
+            if (score < bestScore) {
+                bestScore = score;
+                best = new Plan();
+                best.face = f; best.nb = nb2; best.hit = hp; best.dist = dist;
+            }
+        }
+        if (best != null && want.contains(Properties.HORIZONTAL_FACING)) {
+            Direction hf = want.get(Properties.HORIZONTAL_FACING);
+            Direction look = want.getBlock() instanceof StairsBlock ? hf : hf.getOpposite();
+            best.yaw = look.asRotation();
+        }
+        return best;
     }
 
     public static void tick(MinecraftClient mc) {
@@ -148,47 +220,30 @@ public final class SchematicBuilder {
         Vec3d eye = p.getEyePos();
         Box body = p.getBoundingBox();
         int idx = -1, slot = -1;
-        Block block = null;
-        BlockPos pos = null, nb = null;
-        Direction face = null;
-        Vec3d hit = null;
-        double dist = Double.MAX_VALUE;
+        BlockState want = null;
+        BlockPos pos = null;
+        Plan plan = null;
         boolean paused = false, sawUnsupported = false, sawBody = false;
         Set<String> need = new LinkedHashSet<>();
 
         for (int i = cursor; i < n && i < cursor + 500; i++) {
             if (done[i]) continue;
             BlockPos bp = origin.add(loaded.xs[i], loaded.ys[i], loaded.zs[i]);
-            Block b = loaded.blocks[i];
+            BlockState ws = loaded.states[i];
+            Block b = ws.getBlock();
             BlockState cur = w.getBlockState(bp);
             if (cur.isOf(b)) { done[i] = true; remaining--; continue; }
             if (!cur.isAir() && !cur.isReplaceable()) { done[i] = true; remaining--; continue; }
             if (body.intersects(new Box(bp))) { sawBody = true; continue; }
-
-            Direction bf = null;
-            BlockPos bnb = null;
-            Vec3d bhit = null;
-            double bd = Double.MAX_VALUE;
-            boolean supported = false;
-            for (Direction d : Direction.values()) {
-                BlockPos nb2 = bp.offset(d);
-                BlockState ns = w.getBlockState(nb2);
-                if (ns.isAir() || ns.isReplaceable() || ns.getCollisionShape(w, nb2).isEmpty()) continue;
-                supported = true;
-                Direction f = d.getOpposite();
-                Vec3d hp = Vec3d.ofCenter(nb2).add(f.getOffsetX() * 0.5, f.getOffsetY() * 0.5, f.getOffsetZ() * 0.5);
-                double dd = eye.squaredDistanceTo(hp);
-                if (dd < bd) { bd = dd; bf = f; bnb = nb2; bhit = hp; }
-            }
-            if (!supported) { sawUnsupported = true; continue; }
-
+            Plan pl = plan(w, bp, ws, eye);
+            if (pl == null) { sawUnsupported = true; continue; }
             int sl = findSlot(p, b.asItem());
             if (sl < 0) {
                 need.add(b.getName().getString());
                 paused = true;
                 break;
             }
-            idx = i; slot = sl; block = b; pos = bp; nb = bnb; face = bf; hit = bhit; dist = bd;
+            idx = i; slot = sl; want = ws; pos = bp; plan = pl;
             break;
         }
 
@@ -202,10 +257,7 @@ public final class SchematicBuilder {
 
         if (idx < 0) {
             if (sawBody) {
-                if (walk) {
-                    mc.options.backKey.setPressed(true);
-                    walking = true;
-                }
+                if (walk) { mc.options.backKey.setPressed(true); walking = true; }
                 status = "Stepping away from the build...";
             } else if (sawUnsupported) {
                 status = "Nothing to build against yet - stand next to the ground / existing blocks";
@@ -217,15 +269,17 @@ public final class SchematicBuilder {
             return;
         }
 
-        boolean inReach = dist <= 4.3 * 4.3;
-        if (inReach) {
+        if (plan.dist <= 4.3 * 4.3) {
             releaseKeys();
-            boolean aligned = lookAt(p, eye, hit);
-            status = "Placing " + block.getName().getString() + "... " + placed() + " / " + total();
+            boolean aligned = lookAt(p, eye, plan.hit);
+            status = "Placing " + want.getBlock().getName().getString() + "... " + placed() + " / " + total();
             if (aligned && cooldown <= 0 && tick - lastTry[idx] >= 3) {
                 p.getInventory().selectedSlot = slot;
                 p.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(slot));
-                ActionResult r = mc.interactionManager.interactBlock(p, Hand.MAIN_HAND, new BlockHitResult(hit, face, nb, false));
+                boolean spoof = !Float.isNaN(plan.yaw);
+                if (spoof) sendLook(p, plan.yaw, p.getPitch());
+                ActionResult r = mc.interactionManager.interactBlock(p, Hand.MAIN_HAND, new BlockHitResult(plan.hit, plan.face, plan.nb, false));
+                if (spoof) sendLook(p, p.getYaw(), p.getPitch());
                 lastClick = r.isAccepted() ? "accepted" : r.getClass().getSimpleName();
                 if (r.isAccepted()) p.swingHand(Hand.MAIN_HAND);
                 lastTry[idx] = tick;

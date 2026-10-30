@@ -1,6 +1,7 @@
 package dev.myclient.gui;
 
 import dev.myclient.Config;
+import dev.myclient.Keybinds;
 import dev.myclient.MyClient;
 import dev.myclient.Settings;
 import dev.myclient.builder.SchematicBuilder;
@@ -11,6 +12,7 @@ import dev.myclient.cosmetic.Palette;
 import dev.myclient.cosmetic.Preview;
 import dev.myclient.fake.FakePack;
 import dev.myclient.fake.FakeScoreboard;
+import dev.myclient.fake.FakeSpawners;
 import dev.myclient.module.SusChunkFinder;
 import dev.myclient.macro.Macro;
 import dev.myclient.module.Module;
@@ -38,7 +40,8 @@ public class ClientScreen extends Screen {
         MODS("Mods", 170, 250), COSMETICS("Cosmetics", 230, 300), SKIES("Skies", 210, 270), MACROS("Macros", 240, 240),
         EDITOR("Editor", 240, 340), TEXTURES("Textures", 270, 350), BUILDER("Builder", 270, 330),
         TRACERS("Tracers", 240, 360), EFFECTS("Effects", 200, 270), SEARCH("Search", 240, 330),
-        FINDER("Finder", 230, 270), FAKE("Fake", 250, 340), DONUT("Donut", 250, 420);
+        FINDER("Finder", 230, 290), FAKE("Fake", 250, 340), DONUT("Donut", 250, 440),
+        SPAWNER("Spawner", 240, 340);
         final String label;
         final int w, h;
         Tab(String l, int w, int h) { label = l; this.w = w; this.h = h; }
@@ -63,10 +66,17 @@ public class ClientScreen extends Screen {
     private static final int TITLE = 24;
 
     // ---- theme (flat, dark, violet + cyan) ----
-    private static final int PANEL = 0xF2101018, BORDER = 0xFF25253A;
-    private static final int CARD = 0xFF181824, CARD_HOVER = 0xFF212132, TILE = 0xFF0C0C14;
-    private static final int ACCENT = 0xFFB06CFF, ACCENT2 = 0xFF55D6FF;
-    private static final int TEXT = 0xFFECECF6, MUTED = 0xFF8A8AA6, OFF = 0xFF34344A, DANGER = 0xFFFF5470;
+    private static int PANEL, BORDER, BORDER2, CARD, CARD_HOVER, TILE, ACCENT, ACCENT_HOVER, ACCENT2, TEXT, MUTED, OFF, DANGER,
+        BTN, BTN_HOVER, HOVER, ON_ACCENT, DOCK_BG, DOCK_PILL, CHIP, DIM, BG1, BG2;
+
+    private static void applyTheme() {
+        Theme.T t = Theme.current();
+        PANEL = t.panel; BORDER = t.border; BORDER2 = t.border2; CARD = t.card; CARD_HOVER = t.cardHover; TILE = t.tile;
+        ACCENT = t.accent; ACCENT_HOVER = t.accentHover; ACCENT2 = t.accent2; TEXT = t.text; MUTED = t.muted; OFF = t.off;
+        DANGER = t.danger; BTN = t.btn; BTN_HOVER = t.btnHover; HOVER = t.hover; ON_ACCENT = t.onAccent;
+        DOCK_BG = t.dockBg; DOCK_PILL = t.dockPill; CHIP = t.chip; DIM = t.dim; BG1 = t.bg1; BG2 = t.bg2;
+        Draw.radiusScale = t.radius;
+    }
 
     // ---- persistent (static) state ----
     private static final List<Win> WINS = new ArrayList<>();
@@ -75,6 +85,7 @@ public class ClientScreen extends Screen {
     private static final TextBox tracerBox = new TextBox("Search blocks...");
     private static final TextBox searchBox = new TextBox("Search everything...");
     private static final TextBox nameBox = new TextBox("My accessory");
+    private static final TextBox spawnerBox = new TextBox("Search blocks...");
     private static final Map<Macro, TextBox> macroBoxes = new IdentityHashMap<>();
     private static TextBox focus;
 
@@ -96,6 +107,7 @@ public class ClientScreen extends Screen {
         texBox.onChange = s -> refilterTextures();
         tracerBox.onChange = s -> refilterBlocks();
         schemBox.onChange = s -> refilterSchematics();
+        spawnerBox.onChange = s -> refilterSpawner();
     }
 
     private static final TextBox donutTitle = new TextBox("Title");
@@ -122,6 +134,9 @@ public class ClientScreen extends Screen {
         donutPay.text = Settings.payFormat;
         donutPay.cursor = donutPay.text.length();
         donutPay.onChange = v -> Settings.payFormat = v;
+        donutEarn.text = Settings.earnFormat;
+        donutEarn.cursor = donutEarn.text.length();
+        donutEarn.onChange = v -> Settings.earnFormat = v;
         for (int i = 0; i < donutLines.length; i++) {
             final int k = i;
             TextBox b = new TextBox("Line " + (i + 1));
@@ -133,10 +148,11 @@ public class ClientScreen extends Screen {
     }
 
     private static void donutPreset() {
-        Settings.fakeTitle = "&6&lDonutSMP";
-        Settings.fakeLines = new ArrayList<>(List.of("&fMoney: &a${money}", "&fShards: &d1,240", "&fKills: &c58", "&fDeaths: &c21",
-            "&fPlaytime: &b36h 12m", "&fRegion: &eEU", "", "&edonutsmp.net"));
+        Settings.fakeTitle = "DonutSMP";
+        Settings.fakeLines = new ArrayList<>(Settings.defaultLines());
         Settings.fakeMoney = 1250000;
+        Settings.payFormat = "&fyou payed {player} &a$&f{amount}";
+        Settings.earnFormat = "&fyou earned &a$&f{amount}";
         donutInit = false;
         initDonut();
     }
@@ -145,10 +161,23 @@ public class ClientScreen extends Screen {
         boolean in(double mx, double my) { return mx >= x && mx < x + w && my >= y && my < y + h; }
     }
     private record Slider(Win win, int x, int y, int w, float min, float max, Consumer<Float> set) {}
+    private static List<String> spawnerFiltered;
+    private static final TextBox donutEarn = new TextBox("Earn message");
+
+    private static void refilterSpawner() {
+        String q = spawnerBox.text.toLowerCase().trim().replace(' ', '_');
+        spawnerFiltered = new ArrayList<>();
+        for (String id : allBlocks()) if (q.isEmpty() || id.contains(q)) spawnerFiltered.add(id);
+        Win w = win(Tab.SPAWNER);
+        if (w != null) w.listScroll = 0;
+    }
+
+    private record RightHit(Win win, int x, int y, int w, int h, String id, String label) {}
     private record BoxRect(Win win, int x, int y, int w, int h, TextBox box) {}
     private record Result(String cat, String label, boolean on, Runnable run) {}
 
     private final List<Hit> hits = new ArrayList<>();
+    private final List<RightHit> rightHits = new ArrayList<>();
     private final List<Slider> sliders = new ArrayList<>();
     private final List<BoxRect> boxes = new ArrayList<>();
     private final Map<String, Float> anim = new HashMap<>();
@@ -328,22 +357,35 @@ public class ClientScreen extends Screen {
         return out;
     }
 
+    private void bindable(int x, int y, int w, int h, String id, String label) {
+        int y0 = Math.max(y, clipY0), y1 = Math.min(y + h, clipY1);
+        if (y1 > y0) rightHits.add(new RightHit(curWin, x, y0, w, y1 - y0, id, label));
+    }
+
+    private void keyTag(DrawContext ctx, String id, int rightX, int y) {
+        String k = Keybinds.label(id);
+        if (k != null) {
+            String t = "[" + k + "]";
+            Ui.text(ctx, t, rightX - Ui.width(t), y, ACCENT2);
+        }
+    }
+
     private void text(DrawContext ctx, String s, float x, float y, int c) { Ui.text(ctx, s, x, y, c); }
 
     private void centered(DrawContext ctx, String s, float mid, float y, int c) { Ui.centered(ctx, s, mid, y, c); }
 
     private void pill(DrawContext ctx, int x, int y, int w, int h, String label, boolean primary, Runnable run) {
         boolean hv = hover(x, y, w, h);
-        int base = primary ? (hv ? 0xFFC38BFF : ACCENT) : (hv ? 0xFF2C2C42 : 0xFF222234);
+        int base = primary ? (hv ? ACCENT_HOVER : ACCENT) : (hv ? BTN_HOVER : BTN);
         Draw.rr(ctx, x, y, w, h, h / 2f, base);
-        centered(ctx, Ui.trim(label, w - 8), x + w / 2f, y + (h - 9) / 2f, primary ? 0xFF14101E : TEXT);
+        centered(ctx, Ui.trim(label, w - 8), x + w / 2f, y + (h - 9) / 2f, primary ? ON_ACCENT : TEXT);
         addHit(x, y, w, h, run);
     }
 
     private void toggle(DrawContext ctx, String key, int x, int y, boolean on, Runnable run) {
         float t = anim(key, on ? 1f : 0f);
         int w = 32, h = 16;
-        if (t > 0.05f) Draw.rr(ctx, x - 2, y - 2, w + 4, h + 4, 10, Draw.alpha(0xB06CFF, (int) (46 * t)));
+        if (t > 0.05f) Draw.rr(ctx, x - 2, y - 2, w + 4, h + 4, 10, Draw.alpha(ACCENT, (int) (46 * t)));
         Draw.rr(ctx, x, y, w, h, 8, Draw.lerp(OFF, ACCENT, t));
         Draw.circle(ctx, x + 8 + (w - 16) * t, y + 8, 5.5f, 0xFFFFFFFF);
         addHit(x, y, w, h, run);
@@ -368,7 +410,7 @@ public class ClientScreen extends Screen {
 
     private void box(DrawContext ctx, TextBox b, int x, int y, int w, int h) {
         boolean f = focus == b;
-        Draw.rr(ctx, x - 1, y - 1, w + 2, h + 2, (h + 2) / 2f, f ? ACCENT : 0xFF2A2A40);
+        Draw.rr(ctx, x - 1, y - 1, w + 2, h + 2, (h + 2) / 2f, f ? ACCENT : BORDER2);
         Draw.rr(ctx, x, y, w, h, h / 2f, TILE);
         int avail = w - 22;
         int start = 0;
@@ -413,6 +455,8 @@ public class ClientScreen extends Screen {
         text(ctx, Ui.trim(label, cw - 56), cx + 9, y + 4, TEXT);
         if (sub != null) text(ctx, Ui.trim(sub, cw - 56), cx + 9, y + 17, MUTED);
         addHit(cx, y, cw, 30, run);
+        bindable(cx, y, cw, 30, "set:" + label, label);
+        keyTag(ctx, "set:" + label, cx + cw - 46, y + 10);
         toggle(ctx, "set:" + label, cx + cw - 40, y + 7, on, run);
     }
 
@@ -494,11 +538,13 @@ public class ClientScreen extends Screen {
     // ======================================================================== main render
     @Override
     public void renderBackground(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        applyTheme();
         float K = K();
         int lw = (int) (width / K), lh = (int) (height / K);
         mx = (int) (mouseX / K);
         my = (int) (mouseY / K);
         hits.clear();
+        rightHits.clear();
         sliders.clear();
         boxes.clear();
         gcell = 0;
@@ -517,13 +563,13 @@ public class ClientScreen extends Screen {
         clipY0 = 0;
         clipY1 = lh;
         Draw.begin(ctx, s, K);
-        ctx.fillGradient(0, 0, Math.round(width * s), Math.round(height * s), 0x50050508, 0x80100820);
+        ctx.fillGradient(0, 0, Math.round(width * s), Math.round(height * s), BG1, BG2);
         int padT = 16;
         { int t0 = 0; for (Tab t : Tab.values()) t0 += Ui.width(t.label) + 16 + 3; if (t0 + 80 > lw) padT = 6; }
         int total = 0;
         for (Tab t : Tab.values()) total += Ui.width(t.label) + padT + 3;
         int dx = (lw - total - 44) / 2;
-        Draw.rr(ctx, dx - 5, 3, total + 7, 24, 12, 0xE60E0E16);
+        Draw.rr(ctx, dx - 5, 3, total + 7, 24, 12, DOCK_BG);
         int tx = dx;
         for (Tab t : Tab.values()) {
             int w = Ui.width(t.label) + padT;
@@ -531,8 +577,8 @@ public class ClientScreen extends Screen {
             boolean open = win != null && win.open;
             boolean hv = hover(tx, 7, w, 16);
             if (open) Draw.rr(ctx, tx, 7, w, 16, 8, ACCENT);
-            else Draw.rr(ctx, tx, 7, w, 16, 8, hv ? 0xFF262638 : 0xFF161622);
-            centered(ctx, t.label, tx + w / 2f, 10, open ? 0xFF14101E : (hv ? TEXT : MUTED));
+            else Draw.rr(ctx, tx, 7, w, 16, 8, hv ? HOVER : DOCK_PILL);
+            centered(ctx, t.label, tx + w / 2f, 10, open ? ON_ACCENT : (hv ? TEXT : MUTED));
             final Tab target = t;
             addHit(tx, 7, w, 16, () -> {
                 Win ww = win(target);
@@ -544,7 +590,7 @@ public class ClientScreen extends Screen {
         for (int bi = 0; bi < 2; bi++) {   // menu size - / + (always reachable, even when the menu is huge)
             int bx2 = dx + total + 14 + bi * 20;
             boolean hvb = hover(bx2 - 8, 7, 16, 16);
-            Draw.circle(ctx, bx2, 15, 8, hvb ? 0xFF3A3A58 : 0xE60E0E16);
+            Draw.circle(ctx, bx2, 15, 8, hvb ? BTN_HOVER : DOCK_BG);
             centered(ctx, bi == 0 ? "-" : "+", bx2, 10, TEXT);
             final int dir = bi == 0 ? -1 : 1;
             addHit(bx2 - 8, 7, 16, 16, () -> Settings.guiScale = Math.max(0.5f, Math.min(1.3f, Math.round((Settings.guiScale + dir * 0.05f) * 20f) / 20f)));
@@ -581,8 +627,8 @@ public class ClientScreen extends Screen {
         text(ctx, w.tab.label, x + 22, y + 7, TEXT);
         int bx = x + w.w - 14, by = y + TITLE / 2;
         boolean hc = hover(bx - 7, by - 7, 14, 14), hm = hover(bx - 25, by - 7, 14, 14);
-        Draw.circle(ctx, bx, by, 5.5f, hc ? 0xFFFF5470 : 0xFF3A3A52);
-        Draw.circle(ctx, bx - 17, by, 5.5f, hm ? 0xFF55D6FF : 0xFF3A3A52);
+        Draw.circle(ctx, bx, by, 5.5f, hc ? DANGER : OFF);
+        Draw.circle(ctx, bx - 17, by, 5.5f, hm ? ACCENT2 : OFF);
         addHit(bx - 7, by - 7, 14, 14, () -> w.open = false);
         addHit(bx - 25, by - 7, 14, 14, () -> w.collapsed = !w.collapsed);
         Draw.end(ctx);
@@ -613,12 +659,13 @@ public class ClientScreen extends Screen {
             case FINDER -> renderFinder(ctx, w, y0);
             case FAKE -> renderFake(ctx, w, y0);
             case DONUT -> renderDonut(ctx, w, y0);
+            case SPAWNER -> renderSpawner(ctx, w, y0);
         };
         w.contentH = h;
         if (h > ch) {
             int barH = Math.max(20, (int) ((long) ch * ch / h));
             int barY = cy + (int) ((ch - barH) * (w.scroll / Math.max(1, h - ch)));
-            Draw.rr(ctx, x + w.w - 7, barY, 3, barH, 1.5f, 0xFF3A3A58);
+            Draw.rr(ctx, x + w.w - 7, barY, 3, barH, 1.5f, BTN_HOVER);
         }
         Draw.end(ctx);
         ctx.disableScissor();
@@ -635,8 +682,10 @@ public class ClientScreen extends Screen {
             boolean hv = hover(cx, y, cw, h);
             Draw.rr(ctx, cx, y, cw, h, 8, hv ? CARD_HOVER : CARD);
             Draw.circle(ctx, cx + 11, y + 13, 3, m.isEnabled() ? ACCENT : OFF);
-            text(ctx, Ui.trim(m.name, cw - 70), cx + 22, y + 8, m.isEnabled() ? TEXT : 0xFFB8B8D0);
+            text(ctx, Ui.trim(m.name, cw - 70), cx + 22, y + 8, m.isEnabled() ? TEXT : DIM);
             addHit(cx, y, cw, 26, m::toggle);
+            bindable(cx, y, cw, 26, "mod:" + m.name, m.name);
+            keyTag(ctx, "mod:" + m.name, cx + cw - 46, y + 8);
             toggle(ctx, "mod:" + m.name, cx + cw - 40, y + 5, m.isEnabled(), m::toggle);
             if (hasSlider) {
                 slider(ctx, m.settingLabel, cx + 9, y + 27, cw - 18, m.settingValue, m.settingMin, m.settingMax,
@@ -691,6 +740,8 @@ public class ClientScreen extends Screen {
             if (on) Draw.rr(ctx, x - 1, y - 1, cw + 2, cardH + 2, 10, ACCENT);
             Draw.rr(ctx, x, y, cw, cardH, 9, hv ? CARD_HOVER : CARD);
             addHit(x, y, cw, cardH, () -> MyClient.COSMETICS.toggle(c));
+            bindable(x, y, cw, cardH, "cos:" + c.id, pretty(c.id));
+            keyTag(ctx, "cos:" + c.id, x + cw - 46, y + 22);
             Draw.rr(ctx, x + 7, y + 11, 58, 58, 8, TILE);
             drawIcon(ctx, c.type, c.animation, Palette.rgb(c), x + 36, y + 40, 44, c.speed);
             text(ctx, Ui.trim(pretty(c.id), cw - 72 - 44), x + 72, y + 7, TEXT);
@@ -755,6 +806,8 @@ public class ClientScreen extends Screen {
             Draw.circle(ctx, cx + cw - 16, y + 17, 7, sel ? ACCENT : OFF);
             if (sel) Draw.circle(ctx, cx + cw - 16, y + 17, 3, 0xFFFFFFFF);
             addHit(cx, y, cw, cardH, () -> MyClient.COSMETICS.activeSky = s);
+            bindable(cx, y, cw, cardH, "sky:" + s, s);
+            keyTag(ctx, "sky:" + s, cx + cw - 28, y + 30);
             if (MyClient.COSMETICS.uploadedSkies.containsKey(s)) {
                 int dx = cx + cw - 16, dy = y + cardH - 13;
                 Draw.circle(ctx, dx, dy, 6.5f, 0xFF3A2433);
@@ -892,8 +945,8 @@ public class ClientScreen extends Screen {
             int rr = ly + 4 + r * 19;
             boolean sel = nm.equals(selTex), hv = hover(cx + 4, rr, cw - 8, 17);
             if (sel) Draw.rr(ctx, cx + 4, rr, cw - 8, 17, 8, ACCENT);
-            else if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, 17, 8, 0xFF262638);
-            text(ctx, Ui.trim(nm, cw - 40), cx + 11, rr + 4, sel ? 0xFF14101E : TEXT);
+            else if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, 17, 8, HOVER);
+            text(ctx, Ui.trim(nm, cw - 40), cx + 11, rr + 4, sel ? ON_ACCENT : TEXT);
             if (TextureLab.isDirty(nm)) Draw.circle(ctx, cx + cw - 14, rr + 8.5f, 3, ACCENT2);
             addHit(cx + 4, rr, cw - 8, 17, () -> selTex = nm);
         }
@@ -992,8 +1045,8 @@ public class ClientScreen extends Screen {
             boolean sel = SchematicBuilder.loaded != null && SchematicBuilder.loaded.name.equals(nm);
             boolean hv = hover(cx + 4, rr, cw - 8, 17);
             if (sel) Draw.rr(ctx, cx + 4, rr, cw - 8, 17, 8, ACCENT);
-            else if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, 17, 8, 0xFF262638);
-            text(ctx, Ui.trim(nm, cw - 28), cx + 11, rr + 4, sel ? 0xFF14101E : TEXT);
+            else if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, 17, 8, HOVER);
+            text(ctx, Ui.trim(nm, cw - 28), cx + 11, rr + 4, sel ? ON_ACCENT : TEXT);
             addHit(cx + 4, rr, cw - 8, 17, () -> loadSchematic(p));
         }
         if (schemFiltered.isEmpty()) {
@@ -1022,6 +1075,8 @@ public class ClientScreen extends Screen {
             });
             text(ctx, "Build", cx + 9, yy + 79, TEXT);
             toggle(ctx, "build", cx + cw - 42, yy + 76, SchematicBuilder.running, () -> SchematicBuilder.setRunning(!SchematicBuilder.running));
+            bindable(cx + 9, yy + 74, cw - 18, 20, "set:Build schematic", "Build schematic");
+            keyTag(ctx, "set:Build schematic", cx + cw - 48, yy + 79);
             text(ctx, "Auto-move + look", cx + 9, yy + 98, TEXT);
             toggle(ctx, "walk", cx + cw - 42, yy + 95, SchematicBuilder.walk, () -> SchematicBuilder.walk = !SchematicBuilder.walk);
             pill(ctx, cx + 9, yy + 115, cw - 18, 17, "Restart", false, SchematicBuilder::restart);
@@ -1068,7 +1123,7 @@ public class ClientScreen extends Screen {
                 int cwid = Ui.width(label) + 22;
                 if (x + cwid > cx + cw) { x = cx; y += 20; }
                 boolean hv = hover(x, y, cwid, 16);
-                Draw.rr(ctx, x, y, cwid, 16, 8, hv ? 0xFF4A2A3C : 0xFF26263E);
+                Draw.rr(ctx, x, y, cwid, 16, 8, hv ? 0xFF4A2A3C : CHIP);
                 Draw.circle(ctx, x + 8, y + 8, 3, 0xFF000000 | Palette.rainbow((id.hashCode() & 0x7fffffff) % 360 / 360f, 0.65f, 1f));
                 text(ctx, label, x + 15, y + 3, TEXT);
                 addHit(x, y, cwid, 16, () -> flipBlock(id));
@@ -1089,7 +1144,7 @@ public class ClientScreen extends Screen {
             String id = blockFiltered.get(idx);
             int rr = ly + 4 + r * rh;
             boolean on = set.contains(id), hv = hover(cx + 4, rr, cw - 8, rh - 2);
-            if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, rh - 2, 8, 0xFF262638);
+            if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, rh - 2, 8, HOVER);
             text(ctx, Ui.trim(pretty(id), cw - 62), cx + 11, rr + 5, TEXT);
             addHit(cx + 4, rr, cw - 8, rh - 2, () -> flipBlock(id));
             toggle(ctx, "tb:" + (editXray ? "x" : "t") + id, cx + cw - 42, rr + 2, on, () -> flipBlock(id));
@@ -1108,6 +1163,8 @@ public class ClientScreen extends Screen {
         settingRow(ctx, y, "Low shield", "Shield sits lower", Settings.lowShield, () -> Settings.lowShield = !Settings.lowShield); y += 34;
         settingRow(ctx, y, "Small totem pop", "Hides the big totem", Settings.smallTotem, () -> Settings.smallTotem = !Settings.smallTotem); y += 34;
         settingRow(ctx, y, "No vanilla particles", "Removes all of them", Settings.noParticles, () -> Settings.noParticles = !Settings.noParticles); y += 40;
+        pill(ctx, cx, y, cw, 20, "Theme: " + Theme.current().name + " (click to change)", true, () -> Settings.theme = (Settings.theme + 1) % Theme.ALL.length);
+        y += 28;
         float shown = pendingScale > 0 ? pendingScale : Settings.guiScale;
         slider(ctx, "Menu size", cx, y, cw, shown, 0.5f, 1.3f, String.format("%.2f", shown), v -> pendingScale = Math.round(v * 20f) / 20f);
         y += 22;
@@ -1194,15 +1251,53 @@ public class ClientScreen extends Screen {
             Result rs = res.get(idx);
             int rr = ly + 4 + r * rh;
             boolean hv = hover(cx + 4, rr, cw - 8, rh - 2);
-            if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, rh - 2, 8, 0xFF262638);
+            if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, rh - 2, 8, HOVER);
             int cwid = Ui.width(rs.cat()) + 12;
-            Draw.rr(ctx, cx + 9, rr + 3, cwid, 14, 7, 0xFF26263E);
+            Draw.rr(ctx, cx + 9, rr + 3, cwid, 14, 7, CHIP);
             text(ctx, rs.cat(), cx + 15, rr + 6, ACCENT2);
             text(ctx, Ui.trim(rs.label(), cw - cwid - 50), cx + 16 + cwid, rr + 6, TEXT);
             Draw.circle(ctx, cx + cw - 15, rr + 10, 4.5f, rs.on() ? ACCENT : OFF);
             addHit(cx + 4, rr, cw - 8, rh - 2, rs.run());
         }
         if (res.size() > 0) text(ctx, res.size() + " results", cx + 3, ly + lh + 3, MUTED);
+        return ly + lh + 18 - y0;
+    }
+
+    // ======================================================================== SPAWNER
+    private int renderSpawner(DrawContext ctx, Win w, int y0) {
+        if (spawnerFiltered == null) refilterSpawner();
+        int y = y0;
+        settingRow(ctx, y, "Fake spawner", "Chosen block = skeleton spawner", Settings.fakeSpawner, () -> { Settings.fakeSpawner = !Settings.fakeSpawner; applyFake(); });
+        y += 36;
+        text(ctx, "Block: " + pretty(Settings.spawnerBlock), cx + 2, y, TEXT);
+        y += 14;
+        for (String line : wrap("Place that block: it looks like a skeleton spawner and plays the spawner sound. Right click it for the spawner menu. Bones ($150) and arrows ($3) build up over time and can be sold. Sneak + right click places blocks next to it. Blocks of that type you did not place stay normal blocks.", cw - 4)) {
+            text(ctx, line, cx + 2, y, MUTED);
+            y += 11;
+        }
+        y += 4;
+        text(ctx, "Your fake spawners here: " + FakeSpawners.count(), cx + 2, y, TEXT);
+        y += 16;
+        box(ctx, spawnerBox, cx, y, cw, 22);
+        int ly = y + 28, rows = 6, rh = 22, lh = rows * rh + 8;
+        w.lx = cx; w.ly = ly; w.lw = cw; w.lh = lh;
+        Draw.rr(ctx, cx, ly, cw, lh, 9, CARD);
+        w.listScroll = Math.max(0, Math.min(w.listScroll, Math.max(0, spawnerFiltered.size() - rows)));
+        for (int r = 0; r < rows; r++) {
+            int idx = w.listScroll + r;
+            if (idx >= spawnerFiltered.size()) break;
+            String id = spawnerFiltered.get(idx);
+            int rr = ly + 4 + r * rh;
+            boolean sel = id.equals(Settings.spawnerBlock), hv = hover(cx + 4, rr, cw - 8, rh - 2);
+            if (sel) Draw.rr(ctx, cx + 4, rr, cw - 8, rh - 2, 8, ACCENT);
+            else if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, rh - 2, 8, HOVER);
+            text(ctx, Ui.trim(pretty(id), cw - 30), cx + 11, rr + 5, sel ? ON_ACCENT : TEXT);
+            addHit(cx + 4, rr, cw - 8, rh - 2, () -> {
+                Settings.spawnerBlock = id;
+                if (Settings.fakeSpawner) applyFake();
+            });
+        }
+        text(ctx, spawnerFiltered.size() + " blocks (scroll the list)", cx + 3, ly + lh + 3, MUTED);
         return ly + lh + 18 - y0;
     }
 
@@ -1217,7 +1312,14 @@ public class ClientScreen extends Screen {
         }
         y += 4;
         text(ctx, "Chunks scanned: " + f.scanned + "   Sus chunks: " + f.found.size(), cx + 2, y, TEXT);
-        y += 16;
+        y += 13;
+        text(ctx, "Chunks with any amethyst: " + f.anyAmethyst.size(), cx + 2, y, TEXT);
+        y += 13;
+        for (String line : wrap("If this stays 0 on a server although geodes exist, the server does not send those blocks to your game (anti-xray) - nothing can find them then.", cw - 4)) {
+            text(ctx, line, cx + 2, y, MUTED);
+            y += 11;
+        }
+        y += 6;
         List<SusChunkFinder.Sus> list = new ArrayList<>(f.found.values());
         if (client.player != null) {
             final double px = client.player.getX(), pz = client.player.getZ();
@@ -1258,7 +1360,7 @@ public class ClientScreen extends Screen {
             List<String> notes = wrap("Affects: " + s.affects(), cw - 20);
             int h = 22 + notes.size() * 11;
             Draw.rr(ctx, cx, y, cw, h, 8, CARD);
-            text(ctx, s.from() + "  ->  " + s.to(), cx + 9, y + 5, Settings.fakeBlocks ? TEXT : 0xFFB8B8D0);
+            text(ctx, s.from() + "  ->  " + s.to(), cx + 9, y + 5, Settings.fakeBlocks ? TEXT : DIM);
             int ny = y + 18;
             for (String n : notes) { text(ctx, n, cx + 9, ny, MUTED); ny += 11; }
             y += h + 4;
@@ -1302,9 +1404,14 @@ public class ClientScreen extends Screen {
         settingRow(ctx, y, "Fake /pay", "/pay is not sent, only shown", Settings.fakePay, () -> Settings.fakePay = !Settings.fakePay);
         y += 34;
         settingRow(ctx, y, "Deduct fake money", "Fake scoreboard money goes down", Settings.payDeduct, () -> Settings.payDeduct = !Settings.payDeduct);
+        y += 34;
+        settingRow(ctx, y, "Also in chat", "Pay message in chat too", Settings.payInChat, () -> Settings.payInChat = !Settings.payInChat);
         y += 38;
         text(ctx, "Pay message ({player} {amount})", cx + 2, y, MUTED);
         box(ctx, donutPay, cx, y + 12, cw, 22);
+        y += 42;
+        text(ctx, "Earn message ({amount}) - spawner sales", cx + 2, y, MUTED);
+        box(ctx, donutEarn, cx, y + 12, cw, 22);
         y += 42;
         for (String line : wrap("Visual only: nothing is sent to the server and nobody else sees it. Do not use it to mislead other players.", cw - 4)) {
             text(ctx, line, cx + 2, y, MUTED);
@@ -1346,6 +1453,21 @@ public class ClientScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 1) {
+            double rx = mouseX / K(), ry = mouseY / K();
+            Win rw = windowAt(rx, ry);
+            if (rw != null) {
+                for (int i = rightHits.size() - 1; i >= 0; i--) {
+                    RightHit h = rightHits.get(i);
+                    if (h.win() == rw && rx >= h.x() && rx < h.x() + h.w() && ry >= h.y() && ry < h.y() + h.h()) {
+                        Keybinds.startCapture(h.id(), h.label());
+                        toast("Press a key for \"" + h.label() + "\"  (Esc = cancel, Backspace = remove)");
+                        return true;
+                    }
+                }
+            }
+            return true;
+        }
         if (button != 0) return true;
         double lx = mouseX / K(), ly = mouseY / K();
         Win w = windowAt(lx, ly);
@@ -1446,6 +1568,14 @@ public class ClientScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (Keybinds.capturingId != null) {
+            String id = Keybinds.capturingId, lab = Keybinds.capturingLabel;
+            Keybinds.capturingId = null;
+            if (keyCode == GLFW.GLFW_KEY_ESCAPE) toast("Cancelled");
+            else if (keyCode == GLFW.GLFW_KEY_BACKSPACE || keyCode == GLFW.GLFW_KEY_DELETE) { Keybinds.bind(id, -1); toast("Key removed: " + lab); }
+            else { Keybinds.bind(id, keyCode); toast(lab + " -> " + Keybinds.keyName(keyCode)); }
+            return true;
+        }
         if (capturing != null) {
             if (keyCode != GLFW.GLFW_KEY_ESCAPE) capturing.keyCode = keyCode;
             capturing = null;

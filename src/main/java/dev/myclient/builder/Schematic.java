@@ -1,7 +1,10 @@
 package dev.myclient.builder;
 
 import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
+import net.minecraft.block.enums.BedPart;
+import net.minecraft.block.enums.DoubleBlockHalf;
 import net.minecraft.item.Items;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtElement;
@@ -9,32 +12,39 @@ import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtList;
 import net.minecraft.nbt.NbtSizeTracker;
 import net.minecraft.registry.Registries;
+import net.minecraft.state.property.Properties;
+import net.minecraft.state.property.Property;
 import net.minecraft.util.Identifier;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
 
-/** Reads Litematica (.litematic) files. Block properties (facing etc.) are ignored: default states are placed. */
+/** Reads Litematica (.litematic) files including block properties (stairs facing, slab type, log axis ...). */
 public final class Schematic {
     public final String name;
     public final int sizeX, sizeY, sizeZ;
     public final int[] xs, ys, zs;
-    public final Block[] blocks;
+    public final BlockState[] states;
 
-    private Schematic(String name, int sx, int sy, int sz, int[] xs, int[] ys, int[] zs, Block[] blocks) {
+    private Schematic(String name, int sx, int sy, int sz, int[] xs, int[] ys, int[] zs, BlockState[] states) {
         this.name = name; this.sizeX = sx; this.sizeY = sy; this.sizeZ = sz;
-        this.xs = xs; this.ys = ys; this.zs = zs; this.blocks = blocks;
+        this.xs = xs; this.ys = ys; this.zs = zs; this.states = states;
     }
 
-    public int count() { return blocks.length; }
+    public int count() { return states.length; }
+
+    private static <T extends Comparable<T>> BlockState withProp(BlockState s, Property<T> p, String v) {
+        Optional<T> o = p.parse(v);
+        return o.isPresent() ? s.with(p, o.get()) : s;
+    }
 
     public static Schematic load(Path file) throws IOException {
         NbtCompound root = NbtIo.readCompressed(file, NbtSizeTracker.ofUnlimitedBytes());
         NbtCompound regions = root.getCompound("Regions");
 
         List<int[]> pos = new ArrayList<>();
-        List<Block> blk = new ArrayList<>();
+        List<BlockState> blk = new ArrayList<>();
         int minX = Integer.MAX_VALUE, minY = Integer.MAX_VALUE, minZ = Integer.MAX_VALUE;
         int maxX = Integer.MIN_VALUE, maxY = Integer.MIN_VALUE, maxZ = Integer.MIN_VALUE;
 
@@ -49,10 +59,18 @@ public final class Schematic {
             int oz = p.getInt("z") + (sz < 0 ? sz + 1 : 0);
 
             NbtList pal = reg.getList("BlockStatePalette", NbtElement.COMPOUND_TYPE);
-            Block[] palette = new Block[pal.size()];
+            BlockState[] palette = new BlockState[pal.size()];
             for (int i = 0; i < palette.length; i++) {
-                Identifier id = Identifier.tryParse(pal.getCompound(i).getString("Name"));
-                palette[i] = id == null ? Blocks.AIR : Registries.BLOCK.get(id);
+                NbtCompound e = pal.getCompound(i);
+                Identifier id = Identifier.tryParse(e.getString("Name"));
+                Block b = id == null ? Blocks.AIR : Registries.BLOCK.get(id);
+                BlockState st = b.getDefaultState();
+                NbtCompound props = e.getCompound("Properties");
+                for (String k : props.getKeys()) {
+                    Property<?> pr = b.getStateManager().getProperty(k);
+                    if (pr != null) st = withProp(st, pr, props.getString(k));
+                }
+                palette[i] = st;
             }
             if (palette.length == 0) continue;
             long[] states = reg.getLongArray("BlockStates");
@@ -68,11 +86,15 @@ public final class Schematic {
                 if (off + bits > 64 && start + 1 < states.length) val |= states[start + 1] << (64 - off);
                 int pi = (int) (val & mask);
                 if (pi >= palette.length) continue;
-                Block b = palette[pi];
+                BlockState st = palette[pi];
+                Block b = st.getBlock();
                 if (b == Blocks.AIR || b == Blocks.CAVE_AIR || b == Blocks.VOID_AIR || b.asItem() == Items.AIR) continue;
+                if (b == Blocks.PISTON_HEAD || b == Blocks.MOVING_PISTON) continue;
+                if (st.contains(Properties.DOUBLE_BLOCK_HALF) && st.get(Properties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.UPPER) continue;
+                if (st.contains(Properties.BED_PART) && st.get(Properties.BED_PART) == BedPart.HEAD) continue;
                 int x = ox + idx % ax, z = oz + (idx / ax) % az, y = oy + idx / (ax * az);
                 pos.add(new int[]{x, y, z});
-                blk.add(b);
+                blk.add(st);
                 minX = Math.min(minX, x); minY = Math.min(minY, y); minZ = Math.min(minZ, z);
                 maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); maxZ = Math.max(maxZ, z);
             }
@@ -86,7 +108,7 @@ public final class Schematic {
 
         int n = order.length;
         int[] xs = new int[n], ys = new int[n], zs = new int[n];
-        Block[] bs = new Block[n];
+        BlockState[] bs = new BlockState[n];
         for (int i = 0; i < n; i++) {
             int[] q = pos.get(order[i]);
             xs[i] = q[0] - minX; ys[i] = q[1] - minY; zs[i] = q[2] - minZ;

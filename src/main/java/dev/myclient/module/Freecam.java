@@ -3,21 +3,24 @@ package dev.myclient.module;
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.input.Input;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.network.OtherClientPlayerEntity;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.option.Perspective;
 import net.minecraft.client.util.InputUtil;
-import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.UUID;
 
-/** Detached camera: your character stays still while the camera flies around. */
+/**
+ * Detached camera: your character stands still (its movement input is switched off) while the camera
+ * follows your mouse and flies with W/A/S/D, Space (up), Shift (down) and Ctrl (fast).
+ */
 public class Freecam extends Module {
     private OtherClientPlayerEntity cam;
+    private Input savedInput;
     private double x, y, z;
-    private float yaw, pitch, savedYaw, savedPitch;
     private Perspective savedPerspective = Perspective.FIRST_PERSON;
     private long last;
 
@@ -33,11 +36,11 @@ public class Freecam extends Module {
         cam = new OtherClientPlayerEntity(mc.world, new GameProfile(UUID.randomUUID(), "Freecam"));
         Vec3d eye = mc.player.getEyePos();
         x = eye.x; y = eye.y; z = eye.z;
-        yaw = savedYaw = mc.player.getYaw();
-        pitch = savedPitch = mc.player.getPitch();
+        savedInput = mc.player.input;
+        mc.player.input = new Input();
         savedPerspective = mc.options.getPerspective();
         mc.options.setPerspective(Perspective.FIRST_PERSON);
-        apply();
+        apply(mc.player.getYaw(), mc.player.getPitch());
         mc.setCameraEntity(cam);
         last = System.nanoTime();
     }
@@ -46,15 +49,15 @@ public class Freecam extends Module {
     protected void onDisable() {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.player != null) {
+            if (savedInput != null) mc.player.input = savedInput;
             mc.setCameraEntity(mc.player);
-            mc.player.setYaw(savedYaw);
-            mc.player.setPitch(savedPitch);
         }
         mc.options.setPerspective(savedPerspective);
         cam = null;
+        savedInput = null;
     }
 
-    private void apply() {
+    private void apply(float yaw, float pitch) {
         cam.setPosition(x, y - 1.62, z);
         cam.prevX = cam.lastRenderX = x;
         cam.prevY = cam.lastRenderY = y - 1.62;
@@ -65,21 +68,14 @@ public class Freecam extends Module {
         cam.prevPitch = pitch;
     }
 
-    private KeyBinding[] keys(MinecraftClient mc) {
-        return new KeyBinding[]{mc.options.forwardKey, mc.options.backKey, mc.options.leftKey, mc.options.rightKey, mc.options.jumpKey, mc.options.sneakKey};
-    }
-
-    /** Called at the start of every client tick: stops the real player from walking. */
-    public void suppress(MinecraftClient mc) {
-        if (!isEnabled() || cam == null) return;
-        for (KeyBinding kb : keys(mc)) KeyBinding.setKeyPressed(KeyBindingHelper.getBoundKeyOf(kb), false);
-    }
-
     private boolean down(MinecraftClient mc, KeyBinding kb) {
         return InputUtil.isKeyPressed(mc.getWindow().getHandle(), KeyBindingHelper.getBoundKeyOf(kb).getCode());
     }
 
-    /** Called every rendered frame for smooth movement and mouse look. */
+    /** Kept for compatibility: the player's input is already replaced, nothing to suppress. */
+    public void suppress(MinecraftClient mc) { }
+
+    /** Called every rendered frame: the camera simply copies the mouse look and flies. */
     public void frame(MinecraftClient mc) {
         if (!isEnabled() || cam == null) return;
         ClientPlayerEntity p = mc.player;
@@ -88,13 +84,7 @@ public class Freecam extends Module {
         float dt = Math.min(0.1f, (now - last) / 1.0e9f);
         last = now;
 
-        yaw += p.getYaw() - savedYaw;
-        pitch = MathHelper.clamp(pitch + (p.getPitch() - savedPitch), -90f, 90f);
-        p.setYaw(savedYaw);
-        p.setPitch(savedPitch);
-        p.prevYaw = savedYaw;
-        p.prevPitch = savedPitch;
-
+        float yaw = p.getYaw(), pitch = p.getPitch();
         if (mc.currentScreen == null) {
             double yr = Math.toRadians(yaw), pr = Math.toRadians(pitch);
             double fx = -Math.sin(yr) * Math.cos(pr), fy = -Math.sin(pr), fz = Math.cos(yr) * Math.cos(pr);
@@ -108,11 +98,12 @@ public class Freecam extends Module {
             if (down(mc, mc.options.sneakKey)) my -= 1;
             double len = Math.sqrt(mx * mx + my * my + mz * mz);
             if (len > 0) {
-                double sp = 10.0 * settingValue * dt / len;
+                double boost = down(mc, mc.options.sprintKey) ? 2.5 : 1.0;
+                double sp = 10.0 * settingValue * boost * dt / len;
                 x += mx * sp; y += my * sp; z += mz * sp;
             }
         }
-        apply();
+        apply(yaw, pitch);
     }
 
     @Override
