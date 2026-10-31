@@ -148,7 +148,8 @@ public class SpawnerScreen extends Screen {
             case CLOSE -> { close(); return true; }
             default -> { return true; }
         }
-        client.getSoundManager().play(PositionedSoundInstance.master(earned > 0 ? SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP : SoundEvents.UI_BUTTON_CLICK, 1.0f));
+        if (earned > 0) client.getSoundManager().play(PositionedSoundInstance.master(SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f));
+        else client.getSoundManager().play(PositionedSoundInstance.master(SoundEvents.UI_BUTTON_CLICK, 1.0f));
         return true;
     }
 

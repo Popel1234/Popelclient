@@ -195,7 +195,7 @@ public final class SchematicBuilder {
         if (best != null && want.contains(Properties.HORIZONTAL_FACING)) {
             Direction hf = want.get(Properties.HORIZONTAL_FACING);
             Direction look = want.getBlock() instanceof StairsBlock ? hf : hf.getOpposite();
-            best.yaw = look.asRotation();
+            best.yaw = (float) Math.toDegrees(Math.atan2(-look.getOffsetX(), look.getOffsetZ()));
         }
         return best;
     }
