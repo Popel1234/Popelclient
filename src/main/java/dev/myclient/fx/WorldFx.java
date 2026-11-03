@@ -103,6 +103,7 @@ public final class WorldFx {
         try { SkyBox.render(ctx); } catch (Throwable ignored) {}
         try { drawFx(ctx); } catch (Throwable ignored) {}
         try { dev.myclient.module.SusChunkFinder.renderWorld(ctx); } catch (Throwable ignored) {}
+        try { dev.myclient.fake.FakeSpawners.renderWorld(ctx); } catch (Throwable ignored) {}
     }
 
     // ------------------------------------------------------------------ drawing

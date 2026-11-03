@@ -9,7 +9,9 @@
     "TotemMixin",
     "ParticleManagerAccessor",
     "ScoreboardMixin",
-    "KnifeMixin"
+    "KnifeMixin",
+    "CameraMixin",
+    "PlayerPoseMixin"
   ],
   "injectors": {
     "defaultRequire": 0

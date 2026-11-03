@@ -2,6 +2,7 @@ package dev.myclient.cosmetic;
 
 import dev.myclient.MyClient;
 import dev.myclient.cosmetic.Cosmetic.Animation;
+import dev.myclient.emote.Emotes;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.OverlayTexture;
 import net.minecraft.client.render.RenderLayer;
@@ -68,6 +69,11 @@ public class CosmeticFeature extends FeatureRenderer<PlayerEntityRenderState, Pl
                 case TRAIL -> trail(m, vcp, c, t, state);
                 default -> { }
             }
+            m.pop();
+        }
+        if (Emotes.car()) {
+            m.push();
+            Emotes.renderCar(m, vcp, lf);
             m.pop();
         }
     }

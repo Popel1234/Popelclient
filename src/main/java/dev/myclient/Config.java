@@ -46,6 +46,7 @@ public final class Config {
         public String spawnerBlock;
         public String earnFormat;
         public int titleFrom = -1, titleTo = -1;
+        public float sbScale = -1f;
     }
 
     public static Data data = new Data();
@@ -89,9 +90,9 @@ public final class Config {
             d.spawners = FakeSpawners.serialize();
             d.spawnerBlock = Settings.spawnerBlock;
             d.earnFormat = Settings.earnFormat;
+            d.sbScale = Settings.scoreboardScale;
             d.titleFrom = Settings.titleFrom;
             d.titleTo = Settings.titleTo;
-            d.flags.put("fakeBlocks", Settings.fakeBlocks);
             d.flags.put("butterfly", Settings.butterfly);
             d.flags.put("fakeScoreboard", Settings.fakeScoreboard);
             d.flags.put("hideRealScoreboard", Settings.hideRealScoreboard);
@@ -168,7 +169,6 @@ public final class Config {
                 Settings.hurtFlash = d.flags.getOrDefault("hurtFlash", true);
                 Settings.fakeSpawner = d.flags.getOrDefault("fakeSpawner", false);
                 Settings.payInChat = d.flags.getOrDefault("payInChat", false);
-                Settings.fakeBlocks = d.flags.getOrDefault("fakeBlocks", false);
                 Settings.butterfly = d.flags.getOrDefault("butterfly", false);
                 Settings.fakeScoreboard = d.flags.getOrDefault("fakeScoreboard", false);
                 Settings.hideRealScoreboard = d.flags.getOrDefault("hideRealScoreboard", false);
@@ -185,6 +185,7 @@ public final class Config {
             if (d.spawners != null) FakeSpawners.load(d.spawners);
             if (d.spawnerBlock != null) Settings.spawnerBlock = d.spawnerBlock;
             if (d.earnFormat != null) Settings.earnFormat = d.earnFormat;
+            if (d.sbScale >= 0.3f && d.sbScale <= 1.5f) Settings.scoreboardScale = d.sbScale;
             if (d.titleFrom >= 0) Settings.titleFrom = d.titleFrom;
             if (d.titleTo >= 0) Settings.titleTo = d.titleTo;
             if (d.fakeTitle != null) Settings.fakeTitle = d.fakeTitle.equals("&6&lDonutSMP") ? "DonutSMP" : d.fakeTitle;

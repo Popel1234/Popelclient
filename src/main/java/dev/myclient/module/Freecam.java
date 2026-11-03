@@ -1,28 +1,26 @@
 package dev.myclient.module;
 
-import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.input.Input;
 import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.client.network.OtherClientPlayerEntity;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.option.Perspective;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.text.Text;
 import net.minecraft.util.math.Vec3d;
 
-import java.util.UUID;
-
 /**
- * Detached camera: your character stands still (its movement input is switched off) while the camera
- * follows your mouse and flies with W/A/S/D, Space (up), Shift (down) and Ctrl (fast).
+ * Detached camera. The game camera is moved by a small hook (CameraMixin) every frame: it looks where your mouse
+ * looks and flies with W/A/S/D, Space (up), Shift (down) and Ctrl (fast). Your character stays where it is.
  */
 public class Freecam extends Module {
-    private OtherClientPlayerEntity cam;
+    public volatile boolean hooked;
     private Input savedInput;
     private double x, y, z;
     private Perspective savedPerspective = Perspective.FIRST_PERSON;
     private long last;
+    private int ticks;
 
     public Freecam() {
         super("Freecam");
@@ -33,57 +31,41 @@ public class Freecam extends Module {
     protected void onEnable() {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.player == null || mc.world == null) { setEnabled(false); return; }
-        cam = new OtherClientPlayerEntity(mc.world, new GameProfile(UUID.randomUUID(), "Freecam"));
         Vec3d eye = mc.player.getEyePos();
         x = eye.x; y = eye.y; z = eye.z;
         savedInput = mc.player.input;
         mc.player.input = new Input();
         savedPerspective = mc.options.getPerspective();
-        mc.options.setPerspective(Perspective.FIRST_PERSON);
-        apply(mc.player.getYaw(), mc.player.getPitch());
-        mc.setCameraEntity(cam);
+        mc.options.setPerspective(Perspective.THIRD_PERSON_BACK);   // so your own character is drawn
         last = System.nanoTime();
+        hooked = false;
+        ticks = 0;
     }
 
     @Override
     protected void onDisable() {
         MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.player != null) {
-            if (savedInput != null) mc.player.input = savedInput;
-            mc.setCameraEntity(mc.player);
-        }
+        if (mc.player != null && savedInput != null) mc.player.input = savedInput;
         mc.options.setPerspective(savedPerspective);
-        cam = null;
         savedInput = null;
-    }
-
-    private void apply(float yaw, float pitch) {
-        cam.setPosition(x, y - 1.62, z);
-        cam.prevX = cam.lastRenderX = x;
-        cam.prevY = cam.lastRenderY = y - 1.62;
-        cam.prevZ = cam.lastRenderZ = z;
-        cam.setYaw(yaw);
-        cam.prevYaw = yaw;
-        cam.setPitch(pitch);
-        cam.prevPitch = pitch;
     }
 
     private boolean down(MinecraftClient mc, KeyBinding kb) {
         return InputUtil.isKeyPressed(mc.getWindow().getHandle(), KeyBindingHelper.getBoundKeyOf(kb).getCode());
     }
 
-    /** Kept for compatibility: the player's input is already replaced, nothing to suppress. */
+    /** Kept for compatibility with older code. */
     public void suppress(MinecraftClient mc) { }
 
-    /** Called every rendered frame: the camera simply copies the mouse look and flies. */
-    public void frame(MinecraftClient mc) {
-        if (!isEnabled() || cam == null) return;
-        ClientPlayerEntity p = mc.player;
-        if (p == null || mc.world == null) { setEnabled(false); return; }
+    public void frame(MinecraftClient mc) { }
+
+    /** Called by the camera hook every frame. Returns {x, y, z, yaw, pitch} or null. */
+    public double[] step(MinecraftClient mc) {
+        if (!isEnabled() || mc.player == null) return null;
         long now = System.nanoTime();
         float dt = Math.min(0.1f, (now - last) / 1.0e9f);
         last = now;
-
+        ClientPlayerEntity p = mc.player;
         float yaw = p.getYaw(), pitch = p.getPitch();
         if (mc.currentScreen == null) {
             double yr = Math.toRadians(yaw), pr = Math.toRadians(pitch);
@@ -103,11 +85,15 @@ public class Freecam extends Module {
                 x += mx * sp; y += my * sp; z += mz * sp;
             }
         }
-        apply(yaw, pitch);
+        return new double[]{x, y, z, yaw, pitch};
     }
 
     @Override
     public void tick(MinecraftClient mc) {
-        if (isEnabled() && (mc.world == null || mc.player == null)) setEnabled(false);
+        if (!isEnabled()) return;
+        if (mc.world == null || mc.player == null) { setEnabled(false); return; }
+        if (++ticks == 60 && !hooked) {
+            mc.player.sendMessage(Text.literal("[Lumen] Freecam: the camera hook did not load in this game version - tell the developer."), false);
+        }
     }
 }

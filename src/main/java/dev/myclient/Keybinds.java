@@ -76,6 +76,11 @@ public final class Keybinds {
             return "Sky: " + MyClient.COSMETICS.activeSky;
         }
         if (id.startsWith("set:")) return toggleSetting(id.substring(4));
+        if (id.startsWith("emote:")) {
+            String e = id.substring(6);
+            dev.myclient.emote.Emotes.toggle(e);
+            return "Emote: " + dev.myclient.emote.Emotes.nameOf(e) + (e.equals(dev.myclient.emote.Emotes.current) ? " (playing)" : " (stopped)");
+        }
         return null;
     }
 
@@ -88,7 +93,6 @@ public final class Keybinds {
             case "Low shield": Settings.lowShield = !Settings.lowShield; return state(label, Settings.lowShield);
             case "Small totem pop": Settings.smallTotem = !Settings.smallTotem; return state(label, Settings.smallTotem);
             case "No vanilla particles": Settings.noParticles = !Settings.noParticles; return state(label, Settings.noParticles);
-            case "Fake blocks": Settings.fakeBlocks = !Settings.fakeBlocks; applyFake(); return state(label, Settings.fakeBlocks);
             case "Butterfly knife": Settings.butterfly = !Settings.butterfly; applyFake(); return state(label, Settings.butterfly);
             case "Fake spawner": Settings.fakeSpawner = !Settings.fakeSpawner; applyFake(); return state(label, Settings.fakeSpawner);
             case "Fake scoreboard": Settings.fakeScoreboard = !Settings.fakeScoreboard; return state(label, Settings.fakeScoreboard);

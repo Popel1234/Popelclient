@@ -112,13 +112,17 @@ public final class FakeScoreboard {
         Text title = title();
         int w = tr.getWidth(title);
         for (Text t : lines) w = Math.max(w, tr.getWidth(t));
-        int sw = mc.getWindow().getScaledWidth(), sh = mc.getWindow().getScaledHeight();
+        float sc = Math.max(0.3f, Math.min(1.5f, Settings.scoreboardScale));
+        int sw = (int) (mc.getWindow().getScaledWidth() / sc), sh = (int) (mc.getWindow().getScaledHeight() / sc);
         int n = lines.size();
         int bottom = sh / 2 + n * 9 / 3, top = bottom - n * 9;
         int x2 = sw - 3, x1 = x2 - w - 4;
+        ctx.getMatrices().push();
+        ctx.getMatrices().scale(sc, sc, 1f);
         ctx.fill(x1 - 2, top - 10, x2, top - 1, 0x66000000);
         ctx.fill(x1 - 2, top - 1, x2, bottom, 0x50000000);
         ctx.drawText(tr, title, x1 + (w + 4 - tr.getWidth(title)) / 2, top - 9, 0xFFFFFFFF, false);
         for (int i = 0; i < n; i++) ctx.drawText(tr, lines.get(i), x1, top + i * 9, 0xFFFFFFFF, false);
+        ctx.getMatrices().pop();
     }
 }

@@ -3,6 +3,8 @@ package dev.myclient;
 import dev.myclient.builder.SchematicBuilder;
 import dev.myclient.cosmetic.CosmeticFeature;
 import dev.myclient.cosmetic.Impulse;
+import dev.myclient.emote.Emotes;
+import dev.myclient.fake.FakePack;
 import dev.myclient.fake.FakePay;
 import dev.myclient.fake.FakeSpawners;
 import dev.myclient.fake.FakeScoreboard;
@@ -64,6 +66,7 @@ public class MyClient implements ClientModInitializer {
         ClientLifecycleEvents.CLIENT_STARTED.register(mc -> {
             COSMETICS.loadUploads();
             Config.load();
+            if (Settings.fakeSpawner) FakePack.registerCutout();
         });
         ClientLifecycleEvents.CLIENT_STOPPING.register(mc -> Config.save());
 
@@ -76,6 +79,8 @@ public class MyClient implements ClientModInitializer {
             SchematicBuilder.tick(mc);
             Keybinds.tick(mc);
             FakeSpawners.tick(mc);
+            FakeSpawners.emitFx(mc);
+            Emotes.tick(mc);
             if (++saveTimer >= 1200) { saveTimer = 0; Config.save(); }
         });
     }

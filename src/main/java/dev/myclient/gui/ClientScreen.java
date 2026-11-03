@@ -10,7 +10,9 @@ import dev.myclient.cosmetic.Cosmetic.Animation;
 import dev.myclient.cosmetic.Cosmetic.Type;
 import dev.myclient.cosmetic.Palette;
 import dev.myclient.cosmetic.Preview;
+import dev.myclient.emote.Emotes;
 import dev.myclient.fake.FakePack;
+import dev.myclient.fake.KnifeDesign;
 import dev.myclient.fake.FakeScoreboard;
 import dev.myclient.fake.FakeSpawners;
 import dev.myclient.module.SusChunkFinder;
@@ -40,8 +42,8 @@ public class ClientScreen extends Screen {
         MODS("Mods", 170, 250), COSMETICS("Cosmetics", 230, 300), SKIES("Skies", 210, 270), MACROS("Macros", 240, 240),
         EDITOR("Editor", 240, 340), TEXTURES("Textures", 270, 350), BUILDER("Builder", 270, 330),
         TRACERS("Tracers", 240, 360), EFFECTS("Effects", 200, 270), SEARCH("Search", 240, 330),
-        FINDER("Finder", 230, 290), FAKE("Fake", 250, 340), DONUT("Donut", 250, 440),
-        SPAWNER("Spawner", 240, 340);
+        FINDER("Finder", 230, 290), FAKE("Knives", 250, 380), DONUT("Donut", 250, 440),
+        SPAWNER("Spawner", 240, 340), EMOTES("Emotes", 210, 300);
         final String label;
         final int w, h;
         Tab(String l, int w, int h) { label = l; this.w = w; this.h = h; }
@@ -660,6 +662,7 @@ public class ClientScreen extends Screen {
             case FAKE -> renderFake(ctx, w, y0);
             case DONUT -> renderDonut(ctx, w, y0);
             case SPAWNER -> renderSpawner(ctx, w, y0);
+            case EMOTES -> renderEmotes(ctx, w, y0);
         };
         w.contentH = h;
         if (h > ch) {
@@ -1271,7 +1274,7 @@ public class ClientScreen extends Screen {
         y += 36;
         text(ctx, "Block: " + pretty(Settings.spawnerBlock), cx + 2, y, TEXT);
         y += 14;
-        for (String line : wrap("Place that block: it looks like a skeleton spawner and plays the spawner sound. Right click it for the spawner menu. Bones ($150) and arrows ($3) build up over time and can be sold. Sneak + right click places blocks next to it. Blocks of that type you did not place stay normal blocks.", cw - 4)) {
+        for (String line : wrap("Place that block: it looks like a skeleton spawner and plays the spawner sound. Right click it for the spawner menu. Bones ($150) and arrows ($3) build up over time and can be sold. Sneak + right click places blocks next to it. Blocks of that type you did not place stay normal blocks. Best look: pick a see-through block like Glass.", cw - 4)) {
             text(ctx, line, cx + 2, y, MUTED);
             y += 11;
         }
@@ -1306,7 +1309,7 @@ public class ClientScreen extends Screen {
         SusChunkFinder f = MyClient.MODULES.susChunks;
         settingRow(ctx, y0, "Sus Chunk Finder", "Grown amethyst buds -> red chunk", f.isEnabled(), f::toggle);
         int y = y0 + 38;
-        for (String line : wrap("Scans every loaded chunk from bedrock to the sky for amethyst clusters and large amethyst buds and marks that chunk red (in the world and through walls).", cw - 4)) {
+        for (String line : wrap("Scans every loaded chunk from Y 0 up to the sky for amethyst clusters and large amethyst buds and marks that chunk red (in the world and through walls).", cw - 4)) {
             text(ctx, line, cx + 2, y, MUTED);
             y += 11;
         }
@@ -1352,23 +1355,46 @@ public class ClientScreen extends Screen {
 
     private int renderFake(DrawContext ctx, Win w, int y0) {
         int y = y0;
-        settingRow(ctx, y, "Fake blocks", "Blocks look like other blocks", Settings.fakeBlocks, () -> { Settings.fakeBlocks = !Settings.fakeBlocks; applyFake(); });
+        settingRow(ctx, y, "Butterfly knife", "Every sword is its own knife", Settings.butterfly, () -> { Settings.butterfly = !Settings.butterfly; applyFake(); });
         y += 36;
-        text(ctx, "Blocks that change:", cx + 2, y, MUTED);
+        text(ctx, "One knife per sword:", cx + 2, y, MUTED);
         y += 14;
-        for (FakePack.Swap s : FakePack.SWAPS) {
-            List<String> notes = wrap("Affects: " + s.affects(), cw - 20);
-            int h = 22 + notes.size() * 11;
-            Draw.rr(ctx, cx, y, cw, h, 8, CARD);
-            text(ctx, s.from() + "  ->  " + s.to(), cx + 9, y + 5, Settings.fakeBlocks ? TEXT : DIM);
-            int ny = y + 18;
-            for (String n : notes) { text(ctx, n, cx + 9, ny, MUTED); ny += 11; }
-            y += h + 4;
+        for (KnifeDesign.Variant v : KnifeDesign.VARIANTS) {
+            Draw.rr(ctx, cx, y, cw, 34, 8, CARD);
+            Draw.circle(ctx, cx + 14, y + 17, 7, 0xFF000000 | v.blade());
+            Draw.circle(ctx, cx + 14, y + 17, 3.5f, 0xFF000000 | v.inlay());
+            text(ctx, v.name() + (v.comb() ? "  (comb blade)" : ""), cx + 30, y + 5, TEXT);
+            text(ctx, "replaces: " + pretty(v.sword()), cx + 30, y + 18, MUTED);
+            y += 38;
         }
-        y += 8;
-        settingRow(ctx, y, "Butterfly knife", "Every sword becomes a knife", Settings.butterfly, () -> { Settings.butterfly = !Settings.butterfly; applyFake(); });
-        y += 36;
-        for (String line : wrap("The knife flips when you swing (first person). Pack folder: resourcepacks/MyClientFake.", cw - 4)) {
+        y += 6;
+        for (String line : wrap("Curved handles with inlays and holes, pivot screws, latch and a curved blade. In first person it flicks open, rolls over, fans, spins and closes by itself; swinging does a fast flip. Pack folder: resourcepacks/MyClientFake.", cw - 4)) {
+            text(ctx, line, cx + 2, y, MUTED);
+            y += 11;
+        }
+        return y + 8 - y0;
+    }
+
+    // ======================================================================== EMOTES
+    private int renderEmotes(DrawContext ctx, Win w, int y0) {
+        int y = y0;
+        text(ctx, "Right click an emote to give it a key.", cx + 2, y, MUTED);
+        y += 16;
+        for (String[] e : Emotes.LIST) {
+            boolean on = e[0].equals(Emotes.current);
+            boolean hv = hover(cx, y, cw, 30);
+            Draw.rr(ctx, cx, y, cw, 30, 8, hv ? CARD_HOVER : CARD);
+            text(ctx, Ui.trim(e[1], cw - 70), cx + 10, y + 11, on ? ACCENT2 : TEXT);
+            Runnable run = () -> Emotes.toggle(e[0]);
+            addHit(cx, y, cw, 30, run);
+            bindable(cx, y, cw, 30, "emote:" + e[0], e[1]);
+            keyTag(ctx, "emote:" + e[0], cx + cw - 46, y + 11);
+            toggle(ctx, "emote:" + e[0], cx + cw - 40, y + 7, on, run);
+            y += 34;
+        }
+        pill(ctx, cx, y, cw, 20, "Stop emote", false, Emotes::stop);
+        y += 30;
+        for (String line : wrap("Walking, sneaking or jumping ends an emote. Only you see it - switch to third person (F5). The Maybach emote puts you on the hood of a bouncing Maybach.", cw - 4)) {
             text(ctx, line, cx + 2, y, MUTED);
             y += 11;
         }
@@ -1386,7 +1412,10 @@ public class ClientScreen extends Screen {
         settingRow(ctx, y, "Fake scoreboard", "Only on your screen", Settings.fakeScoreboard, () -> Settings.fakeScoreboard = !Settings.fakeScoreboard);
         y += 34;
         settingRow(ctx, y, "Hide real scoreboard", "Hides the server's board", Settings.hideRealScoreboard, () -> Settings.hideRealScoreboard = !Settings.hideRealScoreboard);
-        y += 38;
+        y += 36;
+        slider(ctx, "Size", cx, y, cw, Settings.scoreboardScale, 0.4f, 1.2f, String.format("%.2f", Settings.scoreboardScale),
+            v -> Settings.scoreboardScale = Math.round(v * 20f) / 20f);
+        y += 30;
         text(ctx, "Title", cx + 2, y, MUTED);
         box(ctx, donutTitle, cx, y + 12, cw, 22);
         y += 40;

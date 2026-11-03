@@ -60,3 +60,10 @@ Still to build (version-specific, needs a dev environment to test):
 - Right-click almost anything in the menu and press a key to bind it (works without opening the menu).
 - Freecam rewritten (camera follows the mouse, Ctrl = fast). New menu themes (Ember, Ocean, Frost, Violet).
 - Schematic builder reads block properties and places stairs, slabs, logs and furnaces with the right orientation.
+
+## v0.8
+- Removed the fake blocks.
+- Butterfly knives: one design per sword, animated first-person tricks.
+- Spawner: see-through cage, spinning skeleton with flames.
+- Freecam via a camera hook (no fake entity). Sus Chunk Finder only scans from Y 0 up.
+- Fake scoreboard has a size slider. Emotes (incl. Maybach hood).

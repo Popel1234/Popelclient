@@ -18,14 +18,14 @@ public final class Settings {
     public static int theme = 0;
 
     // fake textures / knife / spawner (resource pack based)
-    public static boolean fakeBlocks;
     public static boolean butterfly;
     public static boolean fakeSpawner;
-    public static String spawnerBlock = "minecraft:crying_obsidian";
+    public static String spawnerBlock = "minecraft:glass";
 
     // fake scoreboard + fake /pay (visual only)
     public static boolean fakeScoreboard;
     public static boolean hideRealScoreboard;
+    public static float scoreboardScale = 0.7f;
     public static boolean fakePay;
     public static boolean payDeduct = true;
     public static boolean payInChat;

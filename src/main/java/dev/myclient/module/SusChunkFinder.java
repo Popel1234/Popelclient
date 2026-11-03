@@ -56,11 +56,13 @@ public class SusChunkFinder extends Module {
         for (int i = 0; i < sections.length; i++) {
             ChunkSection sec = sections[i];
             if (sec == null || sec.isEmpty()) continue;
+            if (ch.getBottomY() + i * 16 + 15 < 0) continue;   // only Y 0 and above
             if (sec.hasAny(st -> st.isOf(Blocks.BUDDING_AMETHYST) || st.isOf(Blocks.SMALL_AMETHYST_BUD) || st.isOf(Blocks.MEDIUM_AMETHYST_BUD)
                 || st.isOf(Blocks.LARGE_AMETHYST_BUD) || st.isOf(Blocks.AMETHYST_CLUSTER))) any = true;
             if (!sec.hasAny(st -> st.isOf(Blocks.AMETHYST_CLUSTER) || st.isOf(Blocks.LARGE_AMETHYST_BUD))) continue;
             int baseY = ch.getBottomY() + i * 16;
             for (int x = 0; x < 16; x++) for (int y = 0; y < 16; y++) for (int z = 0; z < 16; z++) {
+                if (baseY + y < 0) continue;
                 var st = sec.getBlockState(x, y, z);
                 if (st.isOf(Blocks.AMETHYST_CLUSTER) || st.isOf(Blocks.LARGE_AMETHYST_BUD)) {
                     count++;
