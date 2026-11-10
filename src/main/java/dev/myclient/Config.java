@@ -35,7 +35,6 @@ public final class Config {
         public Map<String, Float> moduleValues = new HashMap<>();
         public Map<String, Boolean> flags = new HashMap<>();
         public float guiScale = 0.75f;
-        public List<String> xrayBlocks = new ArrayList<>();
         public String fakeTitle;
         public List<String> fakeLines;
         public String payFormat;
@@ -98,7 +97,6 @@ public final class Config {
             d.flags.put("hideRealScoreboard", Settings.hideRealScoreboard);
             d.flags.put("fakePay", Settings.fakePay);
             d.flags.put("payDeduct", Settings.payDeduct);
-            d.xrayBlocks = new ArrayList<>(MyClient.MODULES.xray.blocks);
             d.fakeTitle = Settings.fakeTitle;
             d.fakeLines = new ArrayList<>(Settings.fakeLines);
             d.payFormat = Settings.payFormat;
@@ -176,10 +174,6 @@ public final class Config {
                 Settings.payDeduct = d.flags.getOrDefault("payDeduct", true);
             }
             if (d.guiScale >= 0.5f && d.guiScale <= 1.5f) Settings.guiScale = d.guiScale;
-            if (d.xrayBlocks != null && !d.xrayBlocks.isEmpty()) {
-                MyClient.MODULES.xray.blocks.clear();
-                MyClient.MODULES.xray.blocks.addAll(d.xrayBlocks);
-            }
             if (d.keybinds != null) { Keybinds.bindings.clear(); Keybinds.bindings.putAll(d.keybinds); }
             Settings.theme = d.theme;
             if (d.spawners != null) FakeSpawners.load(d.spawners);

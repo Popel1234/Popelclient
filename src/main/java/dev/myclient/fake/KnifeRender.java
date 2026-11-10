@@ -21,18 +21,41 @@ public final class KnifeRender {
 
     private static float ease(float x) { x = Math.max(0f, Math.min(1f, x)); return x * x * (3 - 2 * x); }
 
-    /** returns {handle A angle, blade angle, roll of the whole knife} in degrees */
-    static float[] anim(float t, float swing) {
-        if (swing > 0f) return new float[]{720f * ease(swing), -40f * (float) Math.sin(swing * Math.PI), 360f * ease(swing)};
-        float p = (t % 9f) / 9f;
-        float handle = 0f, blade = 0f, roll = (float) Math.sin(t * 1.7) * 6f;
-        if (p < 0.10f) { blade = 180f * (1f - ease(p / 0.10f)); }                                   // flick open
-        else if (p < 0.40f) { handle = 4f * (float) Math.sin(t * 6); }                              // idle
-        else if (p < 0.56f) { handle = 360f * ease((p - 0.40f) / 0.16f); }                         // rollover
-        else if (p < 0.72f) { float k = (p - 0.56f) / 0.16f; handle = 150f * (float) Math.sin(k * Math.PI * 4); blade = 25f * (float) Math.sin(k * Math.PI * 4 + 1); } // fan
-        else if (p < 0.88f) { roll = 720f * ease((p - 0.72f) / 0.16f); handle = 30f * (float) Math.sin((p - 0.72f) * 40); } // spin
-        else { blade = 180f * ease((p - 0.88f) / 0.12f); }                                          // close
-        return new float[]{handle, blade, roll};
+    private static long trickStart;
+    private static int trick = -1;
+    private static float lastSwing;
+    private static final float TRICK_LEN = 0.85f;
+
+    /** returns {handle A angle, blade angle, roll around the handles, flip forward/back, lift} */
+    static float[] anim(float t, float swing, long now) {
+        if (swing > 0f && lastSwing <= 0f) { trickStart = now; trick = (trick + 1) % 5; }
+        lastSwing = swing;
+        float pr = trick < 0 ? 2f : (now - trickStart) / 1.0e9f / TRICK_LEN;
+        if (pr < 1f) {
+            float e = ease(pr);
+            float lift = (float) Math.sin(pr * Math.PI) * 2.5f;
+            switch (trick) {
+                case 0:
+                    return new float[]{360f * e, 25f * (float) Math.sin(pr * Math.PI), 360f * e, 40f * (float) Math.sin(pr * Math.PI), lift};
+                case 1:
+                    return new float[]{170f * (float) Math.sin(pr * Math.PI * 4), 60f * (float) Math.sin(pr * Math.PI * 4 + 1.2f), 0f, 25f * (float) Math.sin(pr * Math.PI * 2), lift * 0.5f};
+                case 2:
+                    return new float[]{360f * e, 360f * e, 0f, 720f * e, lift * 2f};
+                case 3:
+                    return new float[]{0f, 180f * (float) Math.sin(pr * Math.PI), 360f * e, 30f * (float) Math.sin(pr * Math.PI), lift};
+                default:
+                    return new float[]{-360f * e, -90f * (float) Math.sin(pr * Math.PI), 720f * e, 15f * (float) Math.sin(pr * Math.PI * 2), lift};
+            }
+        }
+        float p = (t % 6f) / 6f;
+        float handle = 0f, blade = 0f, roll = (float) Math.sin(t * 1.7) * 6f, flip = (float) Math.sin(t * 1.1) * 4f;
+        if (p < 0.12f) blade = 180f * (1f - ease(p / 0.12f));
+        else if (p < 0.45f) handle = 4f * (float) Math.sin(t * 6);
+        else if (p < 0.62f) handle = 360f * ease((p - 0.45f) / 0.17f);
+        else if (p < 0.80f) { float k = (p - 0.62f) / 0.18f; handle = 150f * (float) Math.sin(k * Math.PI * 4); blade = 25f * (float) Math.sin(k * Math.PI * 4 + 1); }
+        else if (p < 0.90f) roll = 720f * ease((p - 0.80f) / 0.10f);
+        else blade = 180f * ease((p - 0.90f) / 0.10f);
+        return new float[]{handle, blade, roll, flip, 0f};
     }
 
     private static void v(VertexConsumer vc, Matrix4f m, float x, float y, float z, int rgb, int a) {
@@ -79,7 +102,7 @@ public final class KnifeRender {
         if (var == null) return false;
 
         float t = (float) ((System.nanoTime() % 1_000_000_000_000L) / 1.0e9);
-        float[] a = anim(t, entity.getHandSwingProgress(1f));
+        float[] a = anim(t, entity.getHandSwingProgress(1f), System.nanoTime());
         float lf = 0.45f + 0.55f * Math.max((light >> 4) & 15, (light >> 20) & 15) / 15f;
         VertexConsumer vc = vcp.getBuffer(RenderLayer.getDebugQuads());
 
@@ -95,8 +118,9 @@ public final class KnifeRender {
         ms.translate(8f, 8f, 8f);
         ms.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(-45f));
         ms.translate(-8f, -8f, -8f);
-        // roll of the whole knife around its handle
+        ms.translate(0f, a[4], 0f);
         ms.translate(8f, 4.5f, 8f);
+        ms.multiply(RotationAxis.POSITIVE_X.rotationDegrees(a[3]));
         ms.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(a[2]));
         ms.translate(-8f, -4.5f, -8f);
 

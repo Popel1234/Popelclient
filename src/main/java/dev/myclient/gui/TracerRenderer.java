@@ -10,7 +10,7 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.render.Camera;
 import net.minecraft.util.math.Vec3d;
 
-/** HUD overlay: tracer lines, X-Ray boxes, sus chunk outlines and the red damage flash. */
+/** HUD overlay: tracer lines, sus chunk outlines and the red damage flash. */
 public final class TracerRenderer {
     private TracerRenderer() {}
 
@@ -25,8 +25,6 @@ public final class TracerRenderer {
         out[1] = (float) ((1 - yc / (zc * tan)) / 2 * h);
         return true;
     }
-
-    private static final int[][] EDGES = {{0, 1}, {1, 3}, {3, 2}, {2, 0}, {4, 5}, {5, 7}, {7, 6}, {6, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
 
     private static void line3(DrawContext ctx, double x1, double y1, double z1, double x2, double y2, double z2, float th, int col, float[] a, float[] b) {
         if (project(x1, y1, z1, a) && project(x2, y2, z2, b)) Draw.line(ctx, a[0], a[1], b[0], b[1], th, col);
@@ -47,10 +45,10 @@ public final class TracerRenderer {
         }
 
         Tracers tr = MyClient.MODULES.tracers;
-        boolean lines = tr.isEnabled(), boxes = MyClient.MODULES.xray.isEnabled();
+        boolean lines = tr.isEnabled() && !tr.found.isEmpty();
         SusChunkFinder sus = MyClient.MODULES.susChunks;
         boolean susOn = sus.isEnabled() && !sus.found.isEmpty();
-        if (!(lines && !tr.found.isEmpty()) && !(boxes && !tr.found.isEmpty()) && !susOn) return;
+        if (!lines && !susOn) return;
 
         Camera cam = mc.gameRenderer.getCamera();
         if (cam == null) return;
@@ -87,14 +85,14 @@ public final class TracerRenderer {
             }
         }
 
-        int shown = 0, boxCount = 0;
-        for (Tracers.Target t : tr.found) {
-            if (shown++ > 500) break;
-            double vx = t.pos.getX() + 0.5 - cpx, vy = t.pos.getY() + 0.5 - cpy, vz = t.pos.getZ() + 0.5 - cpz;
-            double dist = Math.sqrt(vx * vx + vy * vy + vz * vz);
-            int al = (int) Math.max(120, Math.min(245, 245 - 120 * dist / Math.max(16, tr.radius)));
-            int col = (al << 24) | (t.color & 0xFFFFFF);
-            if (lines && t.tracer) {
+        if (lines) {
+            int shown = 0;
+            for (Tracers.Target t : tr.found) {
+                if (shown++ > 500) break;
+                double vx = t.pos.getX() + 0.5 - cpx, vy = t.pos.getY() + 0.5 - cpy, vz = t.pos.getZ() + 0.5 - cpz;
+                double dist = Math.sqrt(vx * vx + vy * vy + vz * vz);
+                int al = (int) Math.max(120, Math.min(245, 245 - 120 * dist / Math.max(16, tr.radius)));
+                int col = (al << 24) | (t.color & 0xFFFFFF);
                 double xc = vx * rx + vy * ry + vz * rz, yc = vx * ux + vy * uy + vz * uz, zc = vx * fx + vy * fy + vz * fz;
                 float sx, sy;
                 if (zc > 0.05) {
@@ -111,14 +109,6 @@ public final class TracerRenderer {
                 Draw.line(ctx, w / 2f, h / 2f, sx, sy, 0.7f, col);
                 Draw.circle(ctx, sx, sy, 2.6f, col);
                 if (shown <= 6) Ui.text(ctx, t.name + " " + (int) dist + "m", sx + 5, sy - 4, 0xFFFFFFFF);
-            }
-            if (boxes && t.xray && boxCount < 220) {
-                boxCount++;
-                int bx = t.pos.getX(), by = t.pos.getY(), bz = t.pos.getZ();
-                for (int[] e : EDGES) {
-                    line3(ctx, bx + (e[0] & 1), by + ((e[0] >> 1) & 1), bz + ((e[0] >> 2) & 1),
-                        bx + (e[1] & 1), by + ((e[1] >> 1) & 1), bz + ((e[1] >> 2) & 1), 0.7f, col, a, b);
-                }
             }
         }
         Draw.end(ctx);

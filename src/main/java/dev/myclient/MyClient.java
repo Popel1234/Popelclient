@@ -1,6 +1,5 @@
 package dev.myclient;
 
-import dev.myclient.builder.SchematicBuilder;
 import dev.myclient.cosmetic.CosmeticFeature;
 import dev.myclient.cosmetic.Impulse;
 import dev.myclient.emote.Emotes;
@@ -76,7 +75,6 @@ public class MyClient implements ClientModInitializer {
             COSMETICS.tick();
             MACROS.tick(mc);
             Particles.tick(mc);
-            SchematicBuilder.tick(mc);
             Keybinds.tick(mc);
             FakeSpawners.tick(mc);
             FakeSpawners.emitFx(mc);

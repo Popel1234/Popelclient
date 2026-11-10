@@ -101,11 +101,7 @@ public final class Keybinds {
             case "Deduct fake money": Settings.payDeduct = !Settings.payDeduct; return state(label, Settings.payDeduct);
             case "Also in chat": Settings.payInChat = !Settings.payInChat; return state(label, Settings.payInChat);
             case "Tracers": MyClient.MODULES.tracers.toggle(); return state(label, MyClient.MODULES.tracers.isEnabled());
-            case "X-Ray boxes": MyClient.MODULES.xray.toggle(); return state(label, MyClient.MODULES.xray.isEnabled());
             case "Sus Chunk Finder": MyClient.MODULES.susChunks.toggle(); return state(label, MyClient.MODULES.susChunks.isEnabled());
-            case "Build schematic":
-                dev.myclient.builder.SchematicBuilder.setRunning(!dev.myclient.builder.SchematicBuilder.running);
-                return state(label, dev.myclient.builder.SchematicBuilder.running);
             default: return null;
         }
     }

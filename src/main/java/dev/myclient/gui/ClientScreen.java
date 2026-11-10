@@ -4,7 +4,6 @@ import dev.myclient.Config;
 import dev.myclient.Keybinds;
 import dev.myclient.MyClient;
 import dev.myclient.Settings;
-import dev.myclient.builder.SchematicBuilder;
 import dev.myclient.cosmetic.Cosmetic;
 import dev.myclient.cosmetic.Cosmetic.Animation;
 import dev.myclient.cosmetic.Cosmetic.Type;
@@ -40,7 +39,7 @@ public class ClientScreen extends Screen {
 
     public enum Tab {
         MODS("Mods", 170, 250), COSMETICS("Cosmetics", 230, 300), SKIES("Skies", 210, 270), MACROS("Macros", 240, 240),
-        EDITOR("Editor", 240, 340), TEXTURES("Textures", 270, 350), BUILDER("Builder", 270, 330),
+        EDITOR("Editor", 240, 340), TEXTURES("Textures", 270, 350),
         TRACERS("Tracers", 240, 360), EFFECTS("Effects", 200, 270), SEARCH("Search", 240, 330),
         FINDER("Finder", 230, 290), FAKE("Knives", 250, 380), DONUT("Donut", 250, 440),
         SPAWNER("Spawner", 240, 340), EMOTES("Emotes", 210, 300);
@@ -83,7 +82,6 @@ public class ClientScreen extends Screen {
     // ---- persistent (static) state ----
     private static final List<Win> WINS = new ArrayList<>();
     private static final TextBox texBox = new TextBox("Search any block...");
-    private static final TextBox schemBox = new TextBox("Search schematics...");
     private static final TextBox tracerBox = new TextBox("Search blocks...");
     private static final TextBox searchBox = new TextBox("Search everything...");
     private static final TextBox nameBox = new TextBox("My accessory");
@@ -97,8 +95,6 @@ public class ClientScreen extends Screen {
     private static List<String> texFiltered;
     private static List<String> blockIds;
     private static List<String> blockFiltered;
-    private static List<Path> schemFiles = new ArrayList<>();
-    private static List<Path> schemFiltered = new ArrayList<>();
     private static float pendingScale = -1f;
 
     private static Type draftType = Type.HALO;
@@ -108,7 +104,6 @@ public class ClientScreen extends Screen {
     static {
         texBox.onChange = s -> refilterTextures();
         tracerBox.onChange = s -> refilterBlocks();
-        schemBox.onChange = s -> refilterSchematics();
         spawnerBox.onChange = s -> refilterSpawner();
     }
 
@@ -117,7 +112,6 @@ public class ClientScreen extends Screen {
     private static final TextBox donutPay = new TextBox("Pay message");
     private static final TextBox[] donutLines = new TextBox[10];
     private static boolean donutInit;
-    private static boolean editXray;
 
     private static void setLine(int i, String v) {
         while (Settings.fakeLines.size() <= i) Settings.fakeLines.add("");
@@ -262,8 +256,6 @@ public class ClientScreen extends Screen {
             w.x = Math.max(0, Math.min(w.x, Math.max(0, lw - w.w)));
             w.y = Math.max(0, Math.min(w.y, Math.max(0, lh - TITLE)));
         }
-        schemFiles = SchematicBuilder.listFiles();
-        refilterSchematics();
         if (texFiltered == null) refilterTextures();
         if (blockFiltered == null) refilterBlocks();
     }
@@ -303,13 +295,6 @@ public class ClientScreen extends Screen {
         if (w != null) w.listScroll = 0;
     }
 
-    private static void refilterSchematics() {
-        String q = schemBox.text.toLowerCase().trim();
-        schemFiltered = new ArrayList<>();
-        for (Path p : schemFiles) if (q.isEmpty() || p.getFileName().toString().toLowerCase().contains(q)) schemFiltered.add(p);
-        Win w = win(Tab.BUILDER);
-        if (w != null) w.listScroll = 0;
-    }
 
     // ======================================================================== helpers
     private int winHeight(Win w, int lh) {
@@ -654,7 +639,6 @@ public class ClientScreen extends Screen {
             case MACROS -> renderMacros(ctx, w, y0);
             case EDITOR -> renderEditor(ctx, w, y0);
             case TEXTURES -> renderTextures(ctx, w, y0);
-            case BUILDER -> renderBuilder(ctx, w, y0);
             case TRACERS -> renderTracers(ctx, w, y0);
             case EFFECTS -> renderEffects(ctx, w, y0);
             case SEARCH -> renderSearch(ctx, w, y0);
@@ -1023,97 +1007,13 @@ public class ClientScreen extends Screen {
         return true;
     }
 
-    // ======================================================================== BUILDER
-    private void loadSchematic(Path p) {
-        try {
-            SchematicBuilder.load(p);
-            toast("Loaded " + SchematicBuilder.loaded.name);
-        } catch (Exception e) {
-            toast("Could not read that schematic");
-        }
-    }
-
-    private int renderBuilder(DrawContext ctx, Win w, int y0) {
-        box(ctx, schemBox, cx, y0, cw, 24);
-        int ly = y0 + 30, rows = 5, lh = rows * 19 + 8;
-        w.lx = cx; w.ly = ly; w.lw = cw; w.lh = lh;
-        Draw.rr(ctx, cx, ly, cw, lh, 9, CARD);
-        w.listScroll = Math.max(0, Math.min(w.listScroll, Math.max(0, schemFiltered.size() - rows)));
-        for (int r = 0; r < rows; r++) {
-            int idx = w.listScroll + r;
-            if (idx >= schemFiltered.size()) break;
-            Path p = schemFiltered.get(idx);
-            String nm = p.getFileName().toString().replaceFirst("\\.litematic$", "");
-            int rr = ly + 4 + r * 19;
-            boolean sel = SchematicBuilder.loaded != null && SchematicBuilder.loaded.name.equals(nm);
-            boolean hv = hover(cx + 4, rr, cw - 8, 17);
-            if (sel) Draw.rr(ctx, cx + 4, rr, cw - 8, 17, 8, ACCENT);
-            else if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, 17, 8, HOVER);
-            text(ctx, Ui.trim(nm, cw - 28), cx + 11, rr + 4, sel ? ON_ACCENT : TEXT);
-            addHit(cx + 4, rr, cw - 8, 17, () -> loadSchematic(p));
-        }
-        if (schemFiltered.isEmpty()) {
-            text(ctx, schemFiles.isEmpty() ? "No .litematic files found" : "No match", cx + 11, ly + 10, MUTED);
-            if (schemFiles.isEmpty()) text(ctx, "Put them in .minecraft/schematics", cx + 11, ly + 23, MUTED);
-        }
-
-        int iy = ly + lh + 7, ih = 142;
-        Draw.rr(ctx, cx, iy, cw, ih, 9, CARD);
-        int yy = iy + 8;
-        if (SchematicBuilder.loaded == null) {
-            text(ctx, "Select a schematic above.", cx + 9, yy, MUTED);
-        } else {
-            text(ctx, Ui.trim(SchematicBuilder.loaded.name, cw - 18), cx + 9, yy, TEXT);
-            text(ctx, SchematicBuilder.loaded.sizeX + "x" + SchematicBuilder.loaded.sizeY + "x" + SchematicBuilder.loaded.sizeZ
-                + " - " + SchematicBuilder.loaded.count() + " blocks", cx + 9, yy + 12, MUTED);
-            float prog = SchematicBuilder.total() == 0 ? 0f : SchematicBuilder.placed() / (float) SchematicBuilder.total();
-            Draw.rr(ctx, cx + 9, yy + 27, cw - 18, 6, 3, OFF);
-            Draw.rr(ctx, cx + 9, yy + 27, Math.max(6, (cw - 18) * prog), 6, 3, ACCENT2);
-            String o = SchematicBuilder.origin == null ? "Origin: not set"
-                : "Origin: " + SchematicBuilder.origin.getX() + " " + SchematicBuilder.origin.getY() + " " + SchematicBuilder.origin.getZ();
-            text(ctx, o, cx + 9, yy + 39, TEXT);
-            pill(ctx, cx + 9, yy + 53, cw - 18, 17, "Set origin 2 blocks ahead", false, () -> {
-                SchematicBuilder.setOriginHere();
-                toast("Origin set to your position");
-            });
-            text(ctx, "Build", cx + 9, yy + 79, TEXT);
-            toggle(ctx, "build", cx + cw - 42, yy + 76, SchematicBuilder.running, () -> SchematicBuilder.setRunning(!SchematicBuilder.running));
-            bindable(cx + 9, yy + 74, cw - 18, 20, "set:Build schematic", "Build schematic");
-            keyTag(ctx, "set:Build schematic", cx + cw - 48, yy + 79);
-            text(ctx, "Auto-move + look", cx + 9, yy + 98, TEXT);
-            toggle(ctx, "walk", cx + cw - 42, yy + 95, SchematicBuilder.walk, () -> SchematicBuilder.walk = !SchematicBuilder.walk);
-            pill(ctx, cx + 9, yy + 115, cw - 18, 17, "Restart", false, SchematicBuilder::restart);
-        }
-        int sy = iy + ih + 7, lines = 0;
-        for (String line : wrap(SchematicBuilder.status, cw - 4)) {
-            text(ctx, line, cx + 2, sy + lines * 11, SchematicBuilder.missing.isEmpty() ? ACCENT2 : 0xFFFFB454);
-            lines++;
-        }
-        text(ctx, "Last click: " + SchematicBuilder.lastClick, cx + 2, sy + lines * 11, MUTED);
-        lines++;
-        for (String line : wrap("Walks, looks at each block and places it like a player, bottom to top, from your hotbar. Many servers forbid this.", cw - 4)) {
-            text(ctx, line, cx + 2, sy + lines * 11 + 4, MUTED);
-            lines++;
-        }
-        return sy + lines * 11 + 10 - y0;
-    }
-
-    // ======================================================================== TRACERS
-    private void flipBlock(String id) {
-        if (editXray) MyClient.MODULES.xray.toggleBlock(id); else MyClient.MODULES.tracers.toggleBlock(id);
-    }
-
     private int renderTracers(DrawContext ctx, Win w, int y0) {
         dev.myclient.module.Tracers tr = MyClient.MODULES.tracers;
-        Module xr = MyClient.MODULES.xray;
         settingRow(ctx, y0, "Tracers", "Lines to your blocks", tr.isEnabled(), tr::toggle);
-        settingRow(ctx, y0 + 34, "X-Ray boxes", "Boxes through walls", xr.isEnabled(), xr::toggle);
-        slider(ctx, "Range", cx, y0 + 72, cw, tr.radius, 16, 512, tr.radius + "m", v -> { tr.radius = Math.round(v / 8f) * 8; tr.changed(); });
+        slider(ctx, "Range", cx, y0 + 42, cw, tr.radius, 16, 512, tr.radius + "m", v -> { tr.radius = Math.round(v / 8f) * 8; tr.changed(); });
 
-        int y = y0 + 96;
-        pill(ctx, cx, y, cw, 20, "Editing: " + (editXray ? "X-Ray blocks" : "Tracer blocks") + " - click to switch", true, () -> editXray = !editXray);
-        y += 26;
-        java.util.Set<String> set = editXray ? MyClient.MODULES.xray.blocks : tr.blocks;
+        int y = y0 + 68;
+        java.util.Set<String> set = tr.blocks;
         text(ctx, "Selected (" + set.size() + ") - click to remove", cx + 2, y, MUTED);
         y += 13;
         if (set.isEmpty()) {
@@ -1129,7 +1029,7 @@ public class ClientScreen extends Screen {
                 Draw.rr(ctx, x, y, cwid, 16, 8, hv ? 0xFF4A2A3C : CHIP);
                 Draw.circle(ctx, x + 8, y + 8, 3, 0xFF000000 | Palette.rainbow((id.hashCode() & 0x7fffffff) % 360 / 360f, 0.65f, 1f));
                 text(ctx, label, x + 15, y + 3, TEXT);
-                addHit(x, y, cwid, 16, () -> flipBlock(id));
+                addHit(x, y, cwid, 16, () -> tr.toggleBlock(id));
                 x += cwid + 4;
             }
             y += 24;
@@ -1149,8 +1049,8 @@ public class ClientScreen extends Screen {
             boolean on = set.contains(id), hv = hover(cx + 4, rr, cw - 8, rh - 2);
             if (hv) Draw.rr(ctx, cx + 4, rr, cw - 8, rh - 2, 8, HOVER);
             text(ctx, Ui.trim(pretty(id), cw - 62), cx + 11, rr + 5, TEXT);
-            addHit(cx + 4, rr, cw - 8, rh - 2, () -> flipBlock(id));
-            toggle(ctx, "tb:" + (editXray ? "x" : "t") + id, cx + cw - 42, rr + 2, on, () -> flipBlock(id));
+            addHit(cx + 4, rr, cw - 8, rh - 2, () -> tr.toggleBlock(id));
+            toggle(ctx, "tb:" + id, cx + cw - 42, rr + 2, on, () -> tr.toggleBlock(id));
         }
         text(ctx, blockFiltered.size() + " blocks (scroll the list)", cx + 3, ly + lh + 3, MUTED);
         return ly + lh + 18 - y0;
@@ -1201,16 +1101,6 @@ public class ClientScreen extends Screen {
         for (Macro m : MyClient.MACROS.macros) if (m.name.toLowerCase().contains(query))
             out.add(new Result("Macro", m.name, m.enabled, () -> m.enabled = !m.enabled));
         n = 0;
-        for (Path p : schemFiles) {
-            if (n >= 8) break;
-            String nm = p.getFileName().toString().replaceFirst("\\.litematic$", "");
-            if (nm.toLowerCase().contains(query)) {
-                out.add(new Result("Schematic", nm, SchematicBuilder.loaded != null && SchematicBuilder.loaded.name.equals(nm),
-                    () -> { loadSchematic(p); openWindow(Tab.BUILDER); }));
-                n++;
-            }
-        }
-        n = 0;
         for (String id : allBlocks()) {
             if (n >= 15) break;
             if (id.contains(qb)) {
@@ -1240,7 +1130,7 @@ public class ClientScreen extends Screen {
         Draw.rr(ctx, cx, ly, cw, lh, 9, CARD);
         if (searchBox.text.isBlank()) {
             int yy = ly + 10;
-            for (String line : wrap("Type to find modules, cosmetics, skies, macros, schematics, block tracers, block textures and windows.", cw - 22)) {
+            for (String line : wrap("Type to find modules, cosmetics, skies, macros, block tracers, block textures and windows.", cw - 22)) {
                 text(ctx, line, cx + 11, yy, MUTED);
                 yy += 11;
             }
@@ -1583,7 +1473,7 @@ public class ClientScreen extends Screen {
         Win w = windowAt(lx, ly);
         if (w == null || w.collapsed) return true;
         boolean overList = w.lw > 0 && lx >= w.lx && lx < w.lx + w.lw && ly >= w.ly && ly < w.ly + w.lh
-            && (w.tab == Tab.TEXTURES || w.tab == Tab.BUILDER || w.tab == Tab.TRACERS || w.tab == Tab.SEARCH);
+            && (w.tab == Tab.TEXTURES || w.tab == Tab.TRACERS || w.tab == Tab.SEARCH);
         if (overList) w.listScroll = Math.max(0, w.listScroll - (int) Math.signum(vertical) * 2);
         else w.scroll -= (float) vertical * 24f;
         return true;

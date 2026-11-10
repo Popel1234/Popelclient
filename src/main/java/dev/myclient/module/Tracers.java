@@ -1,6 +1,5 @@
 package dev.myclient.module;
 
-import dev.myclient.MyClient;
 import dev.myclient.cosmetic.Palette;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -15,19 +14,13 @@ import net.minecraft.world.chunk.ChunkStatus;
 
 import java.util.*;
 
-/**
- * Finds blocks in all loaded chunks (up to 512 blocks away) and gives them to the HUD renderer:
- * Tracers draws lines to the tracer blocks, X-Ray draws boxes around the X-Ray blocks.
- */
+/** Finds the blocks you selected in all loaded chunks (up to 512 blocks away) and draws lines to them. */
 public class Tracers extends Module {
     public static final class Target {
         public final BlockPos pos;
         public final int color;
         public final String name;
-        public final boolean tracer, xray;
-        Target(BlockPos pos, int color, String name, boolean tracer, boolean xray) {
-            this.pos = pos; this.color = color; this.name = name; this.tracer = tracer; this.xray = xray;
-        }
+        Target(BlockPos pos, int color, String name) { this.pos = pos; this.color = color; this.name = name; }
     }
 
     public final Set<String> blocks = new LinkedHashSet<>();
@@ -38,14 +31,12 @@ public class Tracers extends Module {
     private final List<Long> order = new ArrayList<>();
     private final Map<Block, Integer> colors = new HashMap<>();
     private final Map<Block, String> names = new HashMap<>();
-    private Set<Block> tracerSet = new HashSet<>(), xraySet = new HashSet<>(), resolved = new HashSet<>();
+    private Set<Block> resolved = new HashSet<>();
     private int signature = Integer.MIN_VALUE, cursor, tickCount;
 
     public Tracers() { super("Tracers"); }
 
     public void changed() { signature = Integer.MIN_VALUE; }
-
-    public boolean scanNeeded() { return isEnabled() || MyClient.MODULES.xray.isEnabled(); }
 
     public boolean toggleBlock(String id) {
         boolean added = !blocks.remove(id);
@@ -56,30 +47,20 @@ public class Tracers extends Module {
     }
 
     @Override
-    protected void onDisable() {
-        if (!MyClient.MODULES.xray.isEnabled()) { found = new ArrayList<>(); perChunk.clear(); }
-    }
-
-    private Set<Block> blocksOf(Collection<String> ids) {
-        Set<Block> out = new HashSet<>();
-        for (String id : ids) {
-            Identifier ident = Identifier.tryParse(id);
-            if (ident == null || !Registries.BLOCK.containsId(ident)) continue;
-            Block b = Registries.BLOCK.get(ident);
-            out.add(b);
-            colors.put(b, 0xFF000000 | Palette.rainbow((ident.toString().hashCode() & 0x7fffffff) % 360 / 360f, 0.65f, 1f));
-            names.put(b, ident.getPath().replace('_', ' '));
-        }
-        return out;
-    }
+    protected void onDisable() { found = new ArrayList<>(); perChunk.clear(); }
 
     private void resolve(int sig) {
         colors.clear();
         names.clear();
-        tracerSet = isEnabled() ? blocksOf(blocks) : new HashSet<>();
-        xraySet = MyClient.MODULES.xray.isEnabled() ? blocksOf(MyClient.MODULES.xray.blocks) : new HashSet<>();
-        resolved = new HashSet<>(tracerSet);
-        resolved.addAll(xraySet);
+        resolved = new HashSet<>();
+        for (String id : blocks) {
+            Identifier ident = Identifier.tryParse(id);
+            if (ident == null || !Registries.BLOCK.containsId(ident)) continue;
+            Block b = Registries.BLOCK.get(ident);
+            resolved.add(b);
+            colors.put(b, 0xFF000000 | Palette.rainbow((ident.toString().hashCode() & 0x7fffffff) % 360 / 360f, 0.65f, 1f));
+            names.put(b, ident.getPath().replace('_', ' '));
+        }
         signature = sig;
         perChunk.clear();
         order.clear();
@@ -99,10 +80,7 @@ public class Tracers extends Module {
             for (int x = 0; x < 16; x++) for (int y = 0; y < 16; y++) for (int z = 0; z < 16; z++) {
                 BlockState st = sec.getBlockState(x, y, z);
                 Block b = st.getBlock();
-                if (resolved.contains(b)) {
-                    out.add(new Target(new BlockPos(cx * 16 + x, baseY + y, cz * 16 + z), colors.get(b), names.get(b),
-                        tracerSet.contains(b), xraySet.contains(b)));
-                }
+                if (resolved.contains(b)) out.add(new Target(new BlockPos(cx * 16 + x, baseY + y, cz * 16 + z), colors.get(b), names.get(b)));
             }
         }
         if (out.isEmpty()) perChunk.remove(key); else perChunk.put(key, out);
@@ -110,10 +88,8 @@ public class Tracers extends Module {
 
     @Override
     public void tick(MinecraftClient mc) {
-        if (!scanNeeded()) return;
-        if (mc.world == null || mc.player == null) return;
-        int sig = blocks.hashCode() * 31 + MyClient.MODULES.xray.blocks.hashCode() * 17
-            + (isEnabled() ? 1 : 0) + (MyClient.MODULES.xray.isEnabled() ? 2 : 0);
+        if (!isEnabled() || mc.world == null || mc.player == null) return;
+        int sig = blocks.hashCode();
         if (sig != signature) resolve(sig);
         if (resolved.isEmpty()) { found = new ArrayList<>(); perChunk.clear(); return; }
         tickCount++;
